@@ -398,12 +398,12 @@ void svm_loadProgramFromFile(SVM* svm, const char* file_path)
         exit(1);
     }
 
-    fread(svm->program, sizeof(svm->program[0]), m / sizeof(svm->program[0]), f);
+    size_t size = fread(svm->program, sizeof(svm->program[0]), m / sizeof(svm->program[0]), f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
     }
-    svm->program_size = ARRAY_SIZE(svm->program);
+    svm->program_size = (int)size;
 
     fclose(f);
 }
