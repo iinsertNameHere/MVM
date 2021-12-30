@@ -18,7 +18,7 @@
 
 *On Windows*:
  ```shell
- > asmsc.exe [input.sasm] [output.sbc]
+ > sasmc.exe [input.sasm] [output.sbc]
  ```
 
 ### SASM
