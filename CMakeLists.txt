@@ -7,4 +7,4 @@ set(CMAKE_C_FLAGS "-Wall -Wextra -std=c11 -Wswitch-enum -pedantic ${CMAKE_C_FLAG
 
 add_executable(svm src/svm/svm.c)
 add_executable(asmsc src/asms/asmsc.c)
-add_executable(deasms src/deasms/deasms.c)
+add_executable(diasms src/diasms/diasms.c)
