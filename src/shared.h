@@ -75,9 +75,8 @@ const char* inst_as_cstr(Inst_Type instType);
 #define CONSTRUCT_INST(instType)                (Inst) {.type = (instType)}
 #define CONSTRUCT_OPERAND_INST(instType, value) (Inst) {.type = (instType), .operand = (value)}
 
-#define SVM_STACK_CAPACITY 1024
+#define SVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
 #define SVM_PROGRAM_CAPACITY 1024
-#define SVM_EXECUTION_LIMIT 69
 
 typedef struct {
     Word stack[SVM_STACK_CAPACITY];
@@ -98,6 +97,7 @@ void svm_saveProgramToFile(const SVM* svm, const char* file_path);
 void svm_loadProgramFromFile(SVM* svm, const char* file_path);
 Inst svm_translateLine(StringView line);
 size_t svm_translateSource(StringView source, Inst* program, size_t program_capacity);
+ExeptionState svm_execProgram(SVM* svm, int limit);
 StringView slurp_file(const char* file_path);
 
 #endif //SVM_SHARED_H
@@ -162,8 +162,12 @@ StringView sv_chopByDelim(StringView* sv, char delim)
 
 int sv_eq(StringView a, StringView b)
 {
-    if (a.count != b.count) return 0;
-    else return memcmp(a.data, b.data, a.count) == 0;
+    if (a.count != b.count) {
+        return 0;
+    }
+    else {
+        return memcmp(a.data, b.data, a.count) == 0;
+    }
 }
 
 int sv_as_int(StringView sv)
@@ -188,6 +192,7 @@ const char* exeption_as_cstr(ExeptionState exeption)
         default:
             assert(0 && "exeption_as_cstr: Unreachable");
     }
+    assert(0 && "exeption_as_cstr: Unreachable");
     return "";
 }
 
@@ -208,7 +213,26 @@ const char* inst_as_cstr(Inst_Type instType) {
         default:
             assert(0 && "inst_as_cstr: Unreachable");
     }
+    assert(0 && "inst_as_cstr: Unreachable");
     return "";
+}
+
+ExeptionState svm_execProgram(SVM* svm, int limit)
+{
+    while (limit != 0 && !svm->halt) {
+        ExeptionState err = svm_execInst(svm);
+        if (svm->stack_size > SVM_STACK_CAPACITY) {
+            return EXEPTION_STACK_OVERFLOW;
+        }
+        //svm_dumpStack(stdout, svm);
+        if (err != EXEPTION_SATE_OK) {
+            return err;
+        }
+        if (limit > 0) {
+            --limit;
+        }
+    }
+    return EXEPTION_SATE_OK;
 }
 
 ExeptionState svm_execInst(SVM* svm)
@@ -225,7 +249,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
         case INST_PUSH: {
-            if (svm->stack_size > SVM_STACK_CAPACITY) {
+            if (svm->stack_size >= SVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
             svm->stack[svm->stack_size++] = inst.operand;
@@ -234,12 +258,15 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_DUP: {
-            if (svm->stack_size > SVM_STACK_CAPACITY)
+            if (svm->stack_size > SVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
-            if (svm->stack_size - inst.operand <= 0)
+            }
+            if (svm->stack_size - inst.operand <= 0) {
                 return EXEPTION_STACK_UNDERFLOW;
-            if (inst.operand < 0)
+            }
+            if (inst.operand < 0) {
                 return EXEPTION_ILLEGAL_OPERAND;
+            }
             svm->stack[svm->stack_size] = svm->stack[svm->stack_size - 1 - inst.operand];
             svm->stack_size += 1;
             svm->ip += 1;
@@ -247,8 +274,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_PLUS: {
-            if (svm->stack_size < 2)
+            if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             svm->stack[svm->stack_size - 2] += svm->stack[svm->stack_size - 1];
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -256,8 +284,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_MINUS: {
-            if (svm->stack_size < 2)
+            if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             svm->stack[svm->stack_size - 2] -= svm->stack[svm->stack_size - 1];
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -265,8 +294,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_MULT: {
-            if (svm->stack_size < 2)
+            if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             svm->stack[svm->stack_size - 2] *= svm->stack[svm->stack_size - 1];
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -274,9 +304,12 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_DIV: {
-            if (svm->stack_size < 2)
+            if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
-            if (svm->stack[svm->stack_size - 1] == 0) return EXEPTION_DIV_BY_ZERO;
+            }
+            if (svm->stack[svm->stack_size - 1] == 0) {
+                return EXEPTION_DIV_BY_ZERO;
+            }
             svm->stack[svm->stack_size - 2] /= svm->stack[svm->stack_size - 1];
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -294,8 +327,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_EQ: {
-            if (svm->stack_size < 2)
+            if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             svm->stack[svm->stack_size - 2] = (svm->stack[svm->stack_size - 1] == svm->stack[svm->stack_size - 2]);
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -303,8 +337,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_JMP_IF: {
-            if (svm->stack_size < 1)
+            if (svm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             if (svm->stack[svm->stack_size - 1]) {
                 svm->stack_size -= 1;
                 svm->ip = inst.operand;
@@ -315,8 +350,9 @@ ExeptionState svm_execInst(SVM* svm)
         }
 
         case INST_PRINT_DEBUG: {
-            if (svm->stack_size < 1)
+            if (svm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
+            }
             printf("%lld\n", svm->stack[svm->stack_size-1]);
             svm->stack_size -= 1;
             svm->ip += 1;
@@ -432,7 +468,7 @@ Inst svm_translateLine(StringView line)
         return CONSTRUCT_OPERAND_INST(INST_JMP, operand);
 
     } else {
-        fprintf(stderr, "ERORR: Unknown instruction '%.*s'!", (int)inst_name.count, inst_name.data);
+        fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
         exit(1);
     }
 }
