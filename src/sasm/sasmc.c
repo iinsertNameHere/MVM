@@ -24,10 +24,7 @@ int main(int argc, char** argv) {
             svm.program,
             SVM_PROGRAM_CAPACITY);
 
-    svm_saveProgramToFile(
-            svm.program,
-            svm.program_size,
-            outputFilePath);
+    svm_saveProgramToFile(&svm, outputFilePath);
 
     return  0;
 }

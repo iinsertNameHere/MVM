@@ -94,7 +94,7 @@ ExeptionState svm_execInst(SVM* svm);
 void svm_addInst(SVM* svm, Inst inst);
 void svm_dumpStack(FILE *stream, const SVM* svm);
 void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size);
-void svm_saveProgramToFile(Inst* program, size_t program_size, const char* file_path);
+void svm_saveProgramToFile(const SVM* svm, const char* file_path);
 void svm_loadProgramFromFile(SVM* svm, const char* file_path);
 Inst svm_translateLine(StringView line);
 size_t svm_translateSource(StringView source, Inst* program, size_t program_capacity);
@@ -354,7 +354,7 @@ void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size)
     svm->program_size = program_size;
 }
 
-void svm_saveProgramToFile(Inst* program, size_t program_size, const char* file_path)
+void svm_saveProgramToFile(const SVM* svm, const char* file_path)
 {
     FILE* f = fopen(file_path, "wb");
     if (f == NULL) {
@@ -362,7 +362,7 @@ void svm_saveProgramToFile(Inst* program, size_t program_size, const char* file_
         exit(1);
     }
 
-    fwrite(program, sizeof(program[0]), program_size, f);
+    fwrite(svm->program, sizeof(svm->program[0]), svm->program_size, f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
