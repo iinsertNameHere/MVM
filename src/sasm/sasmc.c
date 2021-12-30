@@ -10,7 +10,7 @@ SVM svm = {0};
 int main(int argc, char** argv) {
     if (argc < 3) {
         fprintf(stderr, "ERROR: Expected input and output!\n");
-        fprintf(stderr, "Usage: asmsc <input.asms> <output.sbc>\n");
+        fprintf(stderr, "Usage: sasm <input.sasm> <output.sbc>\n");
         exit(1);
     }
 
