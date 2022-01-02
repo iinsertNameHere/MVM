@@ -7,19 +7,26 @@
 
 SVM svm = {0};
 
+void usage(FILE* stream) {
+    fprintf(stream, "Usage: vasm <input.vsm> <output.sbc>\n");
+}
+
 int main(int argc, char** argv)
 {
-    char* programName = shift(&argc, &argv);
-    char* input = shift(&argc, &argv);
-
-    if (argc < 3) {
-        fprintf(stderr, "ERROR: Expected input and output!\n");
-        fprintf(stderr, "Usage: %s <input.vsm> <output.sbc>\n", programName);
+    shift(&argc, &argv); // Skip program name.
+    if (argc == 0) {
+        fprintf(stderr, "ERROR: Expected input!\n");
+        usage(stderr);
         exit(1);
     }
+    const char* inputFilePath = shift(&argc, &argv);
 
-    const char* inputFilePath = argv[1];
-    const char* outputFilePath = argv[2];
+    if (argc == 0) {
+        fprintf(stderr, "ERROR: Expected output!\n");
+        usage(stderr);
+        exit(1);
+    }
+    const char* outputFilePath = shift(&argc, &argv);
 
     StringView source_code = slurp_file(inputFilePath);
 
