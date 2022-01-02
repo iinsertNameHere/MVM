@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <ctype.h>
 
+//////////// Data Definitions ////////////
 #define ARRAY_SIZE(xs) (sizeof(xs) / sizeof((xs)[0]))
 
 typedef int64_t Word;
@@ -29,6 +30,7 @@ StringView sv_chopByDelim(StringView* sv, char delim);
 int sv_eq(StringView a, StringView b);
 int sv_as_int(StringView sv);
 
+//////////// EXEPTION Definitions ////////////
 typedef enum {
     EXEPTION_SATE_OK = 0,
     EXEPTION_STACK_OVERFLOW,
@@ -41,6 +43,7 @@ typedef enum {
 
 const char* exeption_as_cstr(ExeptionState exeption);
 
+//////////// INST Definitions ////////////
 typedef enum {
     INST_NOP = 0,
     INST_PUSH,
@@ -75,6 +78,32 @@ const char* inst_as_cstr(Inst_Type instType);
 #define CONSTRUCT_INST(instType)                (Inst) {.type = (instType)}
 #define CONSTRUCT_OPERAND_INST(instType, value) (Inst) {.type = (instType), .operand = (value)}
 
+//////////// Label Definitions ////////////
+#define LABEL_CAPACITY 1024
+#define UNRESOLVED_JMP_CAPACITY 1024
+
+typedef struct {
+    StringView name;
+    Word addr;
+} Label;
+
+typedef struct {
+    StringView label;
+    Word addr;
+} UnresolvedJmp;
+
+typedef struct {
+    Label labels[LABEL_CAPACITY];
+    size_t lables_size;
+    UnresolvedJmp unresolvedJmps[UNRESOLVED_JMP_CAPACITY];
+    size_t unresolvedJmps_size;
+} LabelTable;
+
+Word lt_find(const LabelTable* lt, StringView name);
+void lt_push(LabelTable* lt, StringView name, Word addr);
+void lt_push_ujmp(LabelTable* lt, Word addr, StringView label);
+
+//////////// SVM Definitions ////////////
 #define SVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
 #define SVM_PROGRAM_CAPACITY 1024
 
@@ -90,19 +119,21 @@ typedef struct {
 } SVM;
 
 ExeptionState svm_execInst(SVM* svm);
-void svm_addInst(SVM* svm, Inst inst);
 void svm_dumpStack(FILE *stream, const SVM* svm);
 void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size);
 void svm_saveProgramToFile(const SVM* svm, const char* file_path);
 void svm_loadProgramFromFile(SVM* svm, const char* file_path);
-Inst svm_translateLine(StringView line);
-size_t svm_translateSource(StringView source, Inst* program, size_t program_capacity);
+void svm_translateSource(StringView source, SVM* svm, LabelTable* lt);
 ExeptionState svm_execProgram(SVM* svm, int limit);
+
+//////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path);
 char* shift(int* argc, char*** argv);
 #endif //SVM_SHARED_H
 
 #ifdef SVM_IMPLEMENTATION
+
+//////////// Data Definitions ////////////
 StringView cstr_as_sv(const char* cstr)
 {
     return (StringView) {
@@ -179,6 +210,7 @@ int sv_as_int(StringView sv)
     return result;
 }
 
+//////////// EXEPTION Definitions ////////////
 const char* exeption_as_cstr(ExeptionState exeption)
 {
     switch (exeption) {
@@ -196,6 +228,7 @@ const char* exeption_as_cstr(ExeptionState exeption)
     return "";
 }
 
+//////////// INST Definitions ////////////
 const char* inst_as_cstr(Inst_Type instType) {
     switch (instType) {
         case INST_NOP:         return "INST_NOP";
@@ -217,6 +250,7 @@ const char* inst_as_cstr(Inst_Type instType) {
     return "";
 }
 
+//////////// SVM Definitions ////////////
 ExeptionState svm_execProgram(SVM* svm, int limit)
 {
     while (limit != 0 && !svm->halt) {
@@ -444,47 +478,85 @@ void svm_loadProgramFromFile(SVM* svm, const char* file_path)
     fclose(f);
 }
 
-Inst svm_translateLine(StringView line)
+void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
 {
-    line = sv_ltrim(line);
-    StringView  inst_name = sv_chopByDelim(&line, ' ');
-    StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
+    svm->program_size = 0;
 
-    if (sv_eq(inst_name, cstr_as_sv("push"))) {
-        line = sv_ltrim(line);
-        return CONSTRUCT_OPERAND_INST(INST_PUSH, sv_as_int(operand));
-
-    } else if (sv_eq(inst_name, cstr_as_sv("dup"))) {
-        line = sv_ltrim(line);
-        return CONSTRUCT_OPERAND_INST(INST_DUP, sv_as_int(operand));
-
-    } else if (sv_eq(inst_name, cstr_as_sv("plus"))) {
-        return CONSTRUCT_INST(INST_PLUS);
-
-    } else if (sv_eq(inst_name, cstr_as_sv("jmp"))) {
-        line = sv_ltrim(line);
-        return CONSTRUCT_OPERAND_INST(INST_JMP, sv_as_int(operand));
-
-    } else {
-        fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
-        exit(1);
-    }
-}
-
-size_t svm_translateSource(StringView source, Inst* program, size_t program_capacity)
-{
-    size_t program_size = 0;
+    // Pass one
     while (source.count > 0) {
-        assert(program_size < program_capacity);
+        assert(svm->program_size < SVM_PROGRAM_CAPACITY);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
         if (line.count > 0 && *line.data != '#') {
-            program[program_size++] = svm_translateLine(line);
-            //printf("#%.*s#\n", (int) line.count, line.data);
+            StringView  inst_name = sv_chopByDelim(&line, ' ');
+            StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
+
+            if (inst_name.count > 0 && inst_name.data[inst_name.count - 1] == ':') {
+                StringView label = (StringView) { .count = inst_name.count - 1, .data = inst_name.data };
+                lt_push(lt, label, svm->program_size);
+
+            } else if (sv_eq(inst_name, cstr_as_sv("push"))) {
+                svm->program[svm->program_size++] = (Inst) {
+                    .type = INST_PUSH,
+                    .operand = sv_as_int(operand)
+                };
+            } else if (sv_eq(inst_name, cstr_as_sv("dup"))) {
+                svm->program[svm->program_size++] = (Inst) {
+                        .type = INST_DUP,
+                        .operand = sv_as_int(operand)
+                };
+            } else if (sv_eq(inst_name, cstr_as_sv("plus"))) {
+                svm->program[svm->program_size++] = (Inst) {
+                    .type = INST_PLUS
+                };
+            } else if (sv_eq(inst_name, cstr_as_sv("jmp"))) {
+                lt_push_ujmp(lt, svm->program_size, operand);
+                svm->program[svm->program_size++] = (Inst) {
+                    .type = INST_JMP
+                };
+            } else {
+                fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
+                exit(1);
+            }
         }
     }
-    return program_size;
+
+    // Pass two
+    for (size_t i = 0; i < lt->unresolvedJmps_size; ++i) {
+        Word addr = lt_find(lt, lt->unresolvedJmps[i].label);
+        svm->program[lt->unresolvedJmps[i].addr].operand = addr;
+    }
 }
 
+//////////// Label Definitions ////////////
+Word lt_find(const LabelTable* lt, StringView name)
+{
+    for (size_t i = 0; i < lt->lables_size; ++i) {
+        if (sv_eq(lt->labels[i].name, name)) {
+            return lt->labels[i].addr;
+        }
+    }
+    fprintf(stderr, "ERROR: Label '%.*s' does not exist!\n",
+            (int)name.count, name.data);
+    exit(1);
+    return -1;
+}
+
+void lt_push(LabelTable* lt, StringView name, Word addr)
+{
+    assert(lt->lables_size < LABEL_CAPACITY);
+    lt->labels[lt->lables_size++] = (Label) { .name = name, .addr = addr };
+}
+
+void lt_push_ujmp(LabelTable* lt, Word addr, StringView label)
+{
+    assert(lt->unresolvedJmps_size < UNRESOLVED_JMP_CAPACITY);
+    lt->unresolvedJmps[lt->unresolvedJmps_size++] = (UnresolvedJmp) {
+        .addr = addr,
+        .label = label
+    };
+}
+
+//////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path)
 {
     FILE* f = fopen(file_path, "r");

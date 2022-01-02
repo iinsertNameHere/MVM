@@ -6,6 +6,7 @@
 #include "../shared.h"
 
 SVM svm = {0};
+LabelTable lt = {0};
 
 void usage(FILE* stream) {
     fprintf(stream, "Usage: vasm <input.vsm> <output.sbc>\n");
@@ -30,11 +31,7 @@ int main(int argc, char** argv)
 
     StringView source_code = slurp_file(inputFilePath);
 
-    svm.program_size = svm_translateSource(
-            source_code,
-            svm.program,
-            SVM_PROGRAM_CAPACITY);
-
+    svm_translateSource(source_code, &svm, &lt);
     svm_saveProgramToFile(&svm, outputFilePath);
 
     return  0;
