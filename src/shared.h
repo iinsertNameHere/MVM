@@ -448,24 +448,22 @@ Inst svm_translateLine(StringView line)
 {
     line = sv_ltrim(line);
     StringView  inst_name = sv_chopByDelim(&line, ' ');
+    StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
 
     if (sv_eq(inst_name, cstr_as_sv("push"))) {
         line = sv_ltrim(line);
-        int operand = sv_as_int(sv_rtrim(line));
-        return CONSTRUCT_OPERAND_INST(INST_PUSH, operand);
+        return CONSTRUCT_OPERAND_INST(INST_PUSH, sv_as_int(operand));
 
     } else if (sv_eq(inst_name, cstr_as_sv("dup"))) {
         line = sv_ltrim(line);
-        int operand = sv_as_int(sv_rtrim(line));
-        return CONSTRUCT_OPERAND_INST(INST_DUP, operand);
+        return CONSTRUCT_OPERAND_INST(INST_DUP, sv_as_int(operand));
 
     } else if (sv_eq(inst_name, cstr_as_sv("plus"))) {
         return CONSTRUCT_INST(INST_PLUS);
 
     } else if (sv_eq(inst_name, cstr_as_sv("jmp"))) {
         line = sv_ltrim(line);
-        int operand = sv_as_int(sv_rtrim(line));
-        return CONSTRUCT_OPERAND_INST(INST_JMP, operand);
+        return CONSTRUCT_OPERAND_INST(INST_JMP, sv_as_int(operand));
 
     } else {
         fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
@@ -479,7 +477,7 @@ size_t svm_translateSource(StringView source, Inst* program, size_t program_capa
     while (source.count > 0) {
         assert(program_size < program_capacity);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
-        if (line.count > 0) {
+        if (line.count > 0 && *line.data != '#') {
             program[program_size++] = svm_translateLine(line);
             //printf("#%.*s#\n", (int) line.count, line.data);
         }
