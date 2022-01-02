@@ -1,9 +1,8 @@
-# First two Fibonacci numbers
-    push 0
-    push 1
-# The Loop
-loop:
+# Fibonacci numbers
+push 0
+push 1
+loop:          # Label definition
     dup 1
     dup 1
     plus
-    jmp loop  # Repeat
+    jmp loop   # Jump to 'loop' label
