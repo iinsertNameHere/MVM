@@ -7,10 +7,14 @@
 
 SVM svm = {0};
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
+    char* programName = shift(&argc, &argv);
+    char* input = shift(&argc, &argv);
+
     if (argc < 3) {
         fprintf(stderr, "ERROR: Expected input and output!\n");
-        fprintf(stderr, "Usage: sasm <input.sasm> <output.sbc>\n");
+        fprintf(stderr, "Usage: %s <input.vsm> <output.sbc>\n", programName);
         exit(1);
     }
 

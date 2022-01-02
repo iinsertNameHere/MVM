@@ -99,7 +99,7 @@ Inst svm_translateLine(StringView line);
 size_t svm_translateSource(StringView source, Inst* program, size_t program_capacity);
 ExeptionState svm_execProgram(SVM* svm, int limit);
 StringView slurp_file(const char* file_path);
-
+char* shift(int* argc, char*** argv);
 #endif //SVM_SHARED_H
 
 #ifdef SVM_IMPLEMENTATION
@@ -529,5 +529,14 @@ StringView slurp_file(const char* file_path)
             .count = n,
             .data = buffer,
     };
+}
+
+char* shift(int* argc, char*** argv)
+{
+    assert(*argc > 0);
+    char* res = **argv;
+    *argv += 1;
+    *argc -= 1;
+    return res;
 }
 #endif //SVM_IMPLEMENTATION
