@@ -1,3 +1,4 @@
+jmp 1
 # Fibonacci numbers
 push 0
 push 1

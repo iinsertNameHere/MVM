@@ -494,6 +494,10 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
                 StringView label = (StringView) { .count = inst_name.count - 1, .data = inst_name.data };
                 lt_push(lt, label, svm->program_size);
 
+            } else if (sv_eq(inst_name, cstr_as_sv("nop"))) {
+                svm->program[svm->program_size++] = (Inst) {
+                  .type = INST_NOP
+                };
             } else if (sv_eq(inst_name, cstr_as_sv("push"))) {
                 svm->program[svm->program_size++] = (Inst) {
                     .type = INST_PUSH,
@@ -509,10 +513,17 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
                     .type = INST_PLUS
                 };
             } else if (sv_eq(inst_name, cstr_as_sv("jmp"))) {
-                lt_push_ujmp(lt, svm->program_size, operand);
-                svm->program[svm->program_size++] = (Inst) {
-                    .type = INST_JMP
-                };
+                if (operand.count > 0 && isdigit(*operand.data)) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_JMP,
+                            .operand = sv_as_int(operand)
+                    };
+                } else {
+                    lt_push_ujmp(lt, svm->program_size, operand);
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_JMP
+                    };
+                }
             } else {
                 fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
                 exit(1);
