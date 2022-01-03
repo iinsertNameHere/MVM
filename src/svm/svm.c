@@ -8,8 +8,6 @@
 // Slick VM
 SVM svm = {0};
 
-//NOTE: GitHub https://github.com/iinsertNameHere/Slick
-
 static void usage(FILE* stream)
 {
     fprintf(stream, "Usage: svm -i <input.sbc> [options]\n");
