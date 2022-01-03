@@ -487,46 +487,50 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
         assert(svm->program_size < SVM_PROGRAM_CAPACITY);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
         if (line.count > 0 && *line.data != '#') {
-            StringView  inst_name = sv_chopByDelim(&line, ' ');
-            StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
+            StringView  instName = sv_chopByDelim(&line, ' ');
 
-            if (inst_name.count > 0 && inst_name.data[inst_name.count - 1] == ':') {
-                StringView label = (StringView) { .count = inst_name.count - 1, .data = inst_name.data };
+            if (instName.count > 0 && instName.data[instName.count - 1] == ':') {
+                StringView label = (StringView) { .count = instName.count - 1, .data = instName.data };
                 lt_push(lt, label, svm->program_size);
+                instName = sv_trim(sv_chopByDelim(&line, ' '));
+            }
 
-            } else if (sv_eq(inst_name, cstr_as_sv("nop"))) {
-                svm->program[svm->program_size++] = (Inst) {
-                  .type = INST_NOP
-                };
-            } else if (sv_eq(inst_name, cstr_as_sv("push"))) {
-                svm->program[svm->program_size++] = (Inst) {
-                    .type = INST_PUSH,
-                    .operand = sv_as_int(operand)
-                };
-            } else if (sv_eq(inst_name, cstr_as_sv("dup"))) {
-                svm->program[svm->program_size++] = (Inst) {
-                        .type = INST_DUP,
-                        .operand = sv_as_int(operand)
-                };
-            } else if (sv_eq(inst_name, cstr_as_sv("plus"))) {
-                svm->program[svm->program_size++] = (Inst) {
-                    .type = INST_PLUS
-                };
-            } else if (sv_eq(inst_name, cstr_as_sv("jmp"))) {
-                if (operand.count > 0 && isdigit(*operand.data)) {
+            if (instName.count > 0) {
+                StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
+                if (sv_eq(instName, cstr_as_sv("nop"))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_JMP,
+                            .type = INST_NOP
+                    };
+                } else if (sv_eq(instName, cstr_as_sv("push"))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PUSH,
                             .operand = sv_as_int(operand)
                     };
-                } else {
-                    lt_push_ujmp(lt, svm->program_size, operand);
+                } else if (sv_eq(instName, cstr_as_sv("dup"))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_JMP
+                            .type = INST_DUP,
+                            .operand = sv_as_int(operand)
                     };
+                } else if (sv_eq(instName, cstr_as_sv("plus"))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUS
+                    };
+                } else if (sv_eq(instName, cstr_as_sv("jmp"))) {
+                    if (operand.count > 0 && isdigit(*operand.data)) {
+                        svm->program[svm->program_size++] = (Inst) {
+                                .type = INST_JMP,
+                                .operand = sv_as_int(operand)
+                        };
+                    } else {
+                        lt_push_ujmp(lt, svm->program_size, operand);
+                        svm->program[svm->program_size++] = (Inst) {
+                                .type = INST_JMP
+                        };
+                    }
+                } else {
+                    fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int) instName.count, instName.data);
+                    exit(1);
                 }
-            } else {
-                fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int)inst_name.count, inst_name.data);
-                exit(1);
             }
         }
     }
