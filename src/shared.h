@@ -15,7 +15,16 @@
 //////////// Data Definitions ////////////
 #define ARRAY_SIZE(xs) (sizeof(xs) / sizeof((xs)[0]))
 
-typedef int64_t Word;
+typedef uint64_t InstAddr;
+
+typedef union {
+    uint64_t as_u64;
+    int64_t as_i64;
+    double as_f64;
+    void* as_ptr;
+} Word;
+
+static_assert(sizeof(Word) == 8, "The SVM's Word is expected to be 64 bits!");
 
 typedef struct {
     size_t count;
@@ -84,24 +93,24 @@ const char* inst_as_cstr(Inst_Type instType);
 
 typedef struct {
     StringView name;
-    Word addr;
+    InstAddr addr;
 } Label;
 
 typedef struct {
     StringView label;
-    Word addr;
-} DeferedOperand;
+    InstAddr addr;
+} DeferredOperand;
 
 typedef struct {
     Label labels[LABEL_CAPACITY];
     size_t lables_size;
-    DeferedOperand deferedOperands[DEFERED_OPERANDS_CAPACITY];
-    size_t deferedOperands_size;
+    DeferredOperand deferredOperands[DEFERED_OPERANDS_CAPACITY];
+    size_t deferredOperands_size;
 } Vasm;
 
-Word vasm_findLabelAddr(const Vasm* vasm, StringView name);
-void vasm_pushLabel(Vasm* vasm, StringView name, Word addr);
-void vasm_pushDeferedOperand(Vasm* vasm, Word addr, StringView label);
+InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name);
+void vasm_pushLabel(Vasm* vasm, StringView name, InstAddr addr);
+void vasm_pushDeferredOperand(Vasm* vasm, InstAddr addr, StringView label);
 
 //////////// SVM Definitions ////////////
 #define SVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
@@ -109,11 +118,11 @@ void vasm_pushDeferedOperand(Vasm* vasm, Word addr, StringView label);
 
 typedef struct {
     Word stack[SVM_STACK_CAPACITY];
-    Word stack_size;
+    uint64_t stack_size;
 
     Inst program[SVM_PROGRAM_CAPACITY];
-    Word program_size;
-    Word ip;
+    uint64_t program_size;
+    InstAddr ip;
 
     int halt;
 } SVM;
@@ -271,7 +280,7 @@ ExeptionState svm_execProgram(SVM* svm, int limit)
 
 ExeptionState svm_execInst(SVM* svm)
 {
-    if (svm->ip < 0 || svm->ip >= svm->program_size) {
+    if (svm->ip >= svm->program_size) {
         return EXEPTION_ILLEGAL_INST_ACCESS;
     }
 
@@ -295,13 +304,11 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size > SVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
-            if (svm->stack_size - inst.operand <= 0) {
+            if (svm->stack_size - inst.operand.as_u64 <= 0) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            if (inst.operand < 0) {
-                return EXEPTION_ILLEGAL_OPERAND;
-            }
-            svm->stack[svm->stack_size] = svm->stack[svm->stack_size - 1 - inst.operand];
+
+            svm->stack[svm->stack_size] = svm->stack[svm->stack_size - 1 - inst.operand.as_u64];
             svm->stack_size += 1;
             svm->ip += 1;
             break;
@@ -311,7 +318,7 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2] += svm->stack[svm->stack_size - 1];
+            svm->stack[svm->stack_size - 2].as_u64 += svm->stack[svm->stack_size - 1].as_u64;
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
@@ -321,7 +328,7 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2] -= svm->stack[svm->stack_size - 1];
+            svm->stack[svm->stack_size - 2].as_u64 -= svm->stack[svm->stack_size - 1].as_u64;
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
@@ -331,7 +338,7 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2] *= svm->stack[svm->stack_size - 1];
+            svm->stack[svm->stack_size - 2].as_u64 *= svm->stack[svm->stack_size - 1].as_u64;
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
@@ -341,17 +348,17 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            if (svm->stack[svm->stack_size - 1] == 0) {
+            if (svm->stack[svm->stack_size - 1].as_u64 == 0) {
                 return EXEPTION_DIV_BY_ZERO;
             }
-            svm->stack[svm->stack_size - 2] /= svm->stack[svm->stack_size - 1];
+            svm->stack[svm->stack_size - 2].as_u64 /= svm->stack[svm->stack_size - 1].as_u64;
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
         }
 
         case INST_JMP: {
-            svm->ip = inst.operand;
+            svm->ip = inst.operand.as_u64;
             break;
         }
 
@@ -364,7 +371,7 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2] = (svm->stack[svm->stack_size - 1] == svm->stack[svm->stack_size - 2]);
+            svm->stack[svm->stack_size - 2].as_u64 = (svm->stack[svm->stack_size - 1].as_u64 == svm->stack[svm->stack_size - 2].as_u64);
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
@@ -374,9 +381,9 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            if (svm->stack[svm->stack_size - 1]) {
+            if (svm->stack[svm->stack_size - 1].as_u64) {
                 svm->stack_size -= 1;
-                svm->ip = inst.operand;
+                svm->ip = inst.operand.as_u64;
             } else {
                 svm->ip += 1;
             }
@@ -387,7 +394,7 @@ ExeptionState svm_execInst(SVM* svm)
             if (svm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            printf("%lld\n", svm->stack[svm->stack_size-1]);
+            printf("%llu\n", svm->stack[svm->stack_size-1].as_u64);
             svm->stack_size -= 1;
             svm->ip += 1;
             break;
@@ -403,8 +410,16 @@ void svm_dumpStack(FILE *stream, const SVM* svm)
 {
     fprintf(stream, "STACK:\n");
     if (svm->stack_size > 0) {
-        for (Word i = 0; i < svm->stack_size; ++i) {
-            fprintf(stream, " %lld\n", svm->stack[i]);
+        for (InstAddr i = 0; i < svm->stack_size; ++i) {
+            fprintf(stream, "  u64: %llu | i64: %lld | f64: %lf",
+                    svm->stack[i].as_u64,
+                    svm->stack[i].as_i64,
+                    svm->stack[i].as_f64);
+            if ((uintptr_t)svm->stack[i].as_ptr > 0) {
+                fprintf(stream, " | ptr: 0x%llx\n", (uintptr_t) svm->stack[i].as_ptr);
+            } else {
+                fprintf(stream, " | ptr: (nil)\n");
+            }
         }
     } else {
         fprintf(stream, " [empty]\n");
@@ -498,25 +513,29 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
                 } else if (sv_eq(instName, cstr_as_sv("push"))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PUSH,
-                            .operand = sv_as_int(operand)
+                            .operand = { .as_i64 = sv_as_int(operand)}
                     };
                 } else if (sv_eq(instName, cstr_as_sv("dup"))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_DUP,
-                            .operand = sv_as_int(operand)
+                            .operand = { .as_i64 = sv_as_int(operand)}
                     };
                 } else if (sv_eq(instName, cstr_as_sv("plus"))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PLUS
                     };
+                } else if (sv_eq(instName, cstr_as_sv("halt"))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_HALT
+                    };
                 } else if (sv_eq(instName, cstr_as_sv("jmp"))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         svm->program[svm->program_size++] = (Inst) {
                                 .type = INST_JMP,
-                                .operand = sv_as_int(operand)
+                                .operand = { .as_i64 = sv_as_int(operand)}
                         };
                     } else {
-                        vasm_pushDeferedOperand(vasm, svm->program_size, operand);
+                        vasm_pushDeferredOperand(vasm, svm->program_size, operand);
                         svm->program[svm->program_size++] = (Inst) {
                                 .type = INST_JMP
                         };
@@ -530,14 +549,14 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
     }
 
     // Pass two
-    for (size_t i = 0; i < vasm->deferedOperands_size; ++i) {
-        Word addr = vasm_findLabelAddr(vasm, vasm->deferedOperands[i].label);
-        svm->program[vasm->deferedOperands[i].addr].operand = addr;
+    for (size_t i = 0; i < vasm->deferredOperands_size; ++i) {
+        InstAddr addr = vasm_findLabelAddr(vasm, vasm->deferredOperands[i].label);
+        svm->program[vasm->deferredOperands[i].addr].operand.as_u64 = addr;
     }
 }
 
 //////////// Label Definitions ////////////
-Word vasm_findLabelAddr(const Vasm* vasm, StringView name)
+InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name)
 {
     for (size_t i = 0; i < vasm->lables_size; ++i) {
         if (sv_eq(vasm->labels[i].name, name)) {
@@ -550,16 +569,16 @@ Word vasm_findLabelAddr(const Vasm* vasm, StringView name)
     return -1;
 }
 
-void vasm_pushLabel(Vasm* vasm, StringView name, Word addr)
+void vasm_pushLabel(Vasm* vasm, StringView name, InstAddr addr)
 {
     assert(vasm->lables_size < LABEL_CAPACITY);
     vasm->labels[vasm->lables_size++] = (Label) { .name = name, .addr = addr };
 }
 
-void vasm_pushDeferedOperand(Vasm* vasm, Word addr, StringView label)
+void vasm_pushDeferredOperand(Vasm* vasm, InstAddr addr, StringView label)
 {
-    assert(vasm->deferedOperands_size < DEFERED_OPERANDS_CAPACITY);
-    vasm->deferedOperands[vasm->deferedOperands_size++] = (DeferedOperand) {
+    assert(vasm->deferredOperands_size < DEFERED_OPERANDS_CAPACITY);
+    vasm->deferredOperands[vasm->deferredOperands_size++] = (DeferredOperand) {
         .addr = addr,
         .label = label
     };

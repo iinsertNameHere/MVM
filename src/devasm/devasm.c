@@ -19,16 +19,16 @@ int main(int argc, char** argv)
 
     svm_loadProgramFromFile(&svm, inputFilePath);
 
-    for (Word i = 0; i < svm.program_size; ++i) {
+    for (InstAddr i = 0; i < svm.program_size; ++i) {
         switch (svm.program[i].type) {
             case INST_NOP:
                 printf("nop\n");
                 break;
             case INST_PUSH:
-                printf("push %lld\n", svm.program[i].operand);
+                printf("push %lld\n", svm.program[i].operand.as_i64);
                 break;
             case INST_DUP:
-                printf("dup %lld\n", svm.program[i].operand);
+                printf("dup %lld\n", svm.program[i].operand.as_i64);
                 break;
             case INST_PLUS:
                 printf("plus\n");
@@ -43,10 +43,10 @@ int main(int argc, char** argv)
                 printf("div\n");
                 break;
             case INST_JMP:
-                printf("jmp %lld\n", svm.program[i].operand);
+                printf("jmp %lld\n", svm.program[i].operand.as_i64);
                 break;
             case INST_JMP_IF:
-                printf("jmpif %lld\n", svm.program[i].operand);
+                printf("jmpif %lld\n", svm.program[i].operand.as_i64);
                 break;
             case INST_EQ:
                 printf("eq\n");
