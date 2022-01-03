@@ -23,7 +23,7 @@ typedef struct {
 } StringView;
 
 StringView cstr_as_sv(const char* cstr);
-StringView sv_ltrim(StringView sv);
+StringView sv_vasmrim(StringView sv);
 StringView sv_rtrim(StringView sv);
 StringView sv_trim(StringView sv);
 StringView sv_chopByDelim(StringView* sv, char delim);
@@ -80,7 +80,7 @@ const char* inst_as_cstr(Inst_Type instType);
 
 //////////// Label Definitions ////////////
 #define LABEL_CAPACITY 1024
-#define UNRESOLVED_JMP_CAPACITY 1024
+#define DEFERED_OPERANDS_CAPACITY 1024
 
 typedef struct {
     StringView name;
@@ -90,18 +90,18 @@ typedef struct {
 typedef struct {
     StringView label;
     Word addr;
-} UnresolvedJmp;
+} DeferedOperand;
 
 typedef struct {
     Label labels[LABEL_CAPACITY];
     size_t lables_size;
-    UnresolvedJmp unresolvedJmps[UNRESOLVED_JMP_CAPACITY];
-    size_t unresolvedJmps_size;
-} LabelTable;
+    DeferedOperand deferedOperands[DEFERED_OPERANDS_CAPACITY];
+    size_t deferedOperands_size;
+} Vasm;
 
-Word lt_find(const LabelTable* lt, StringView name);
-void lt_push(LabelTable* lt, StringView name, Word addr);
-void lt_push_ujmp(LabelTable* lt, Word addr, StringView label);
+Word vasm_findLabelAddr(const Vasm* vasm, StringView name);
+void vasm_pushLabel(Vasm* vasm, StringView name, Word addr);
+void vasm_pushDeferedOperand(Vasm* vasm, Word addr, StringView label);
 
 //////////// SVM Definitions ////////////
 #define SVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
@@ -123,7 +123,7 @@ void svm_dumpStack(FILE *stream, const SVM* svm);
 void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size);
 void svm_saveProgramToFile(const SVM* svm, const char* file_path);
 void svm_loadProgramFromFile(SVM* svm, const char* file_path);
-void svm_translateSource(StringView source, SVM* svm, LabelTable* lt);
+void svm_translateSource(StringView source, SVM* svm, Vasm* vasm);
 ExeptionState svm_execProgram(SVM* svm, int limit);
 
 //////////// Util Definitions ////////////
@@ -142,7 +142,7 @@ StringView cstr_as_sv(const char* cstr)
     };
 }
 
-StringView sv_ltrim(StringView sv)
+StringView sv_vasmrim(StringView sv)
 {
     size_t i = 0;
     while (i < sv.count && isspace(sv.data[i])) {
@@ -168,7 +168,7 @@ StringView sv_rtrim(StringView sv)
 
 StringView sv_trim(StringView sv)
 {
-    return sv_ltrim(sv_rtrim(sv));
+    return sv_vasmrim(sv_rtrim(sv));
 }
 
 StringView sv_chopByDelim(StringView* sv, char delim)
@@ -177,7 +177,7 @@ StringView sv_chopByDelim(StringView* sv, char delim)
     while (i < sv->count && sv->data[i] != delim) {
         i += 1;
     }
-    StringView result = {
+    StringView resuvasm = {
             .count = i,
             .data = sv->data
     };
@@ -188,7 +188,7 @@ StringView sv_chopByDelim(StringView* sv, char delim)
         sv->count -= i;
         sv->data  += i;
     }
-    return result;
+    return resuvasm;
 }
 
 int sv_eq(StringView a, StringView b)
@@ -203,11 +203,11 @@ int sv_eq(StringView a, StringView b)
 
 int sv_as_int(StringView sv)
 {
-    int result = 0;
+    int resuvasm = 0;
     for (size_t i = 0; i < sv.count && isdigit(sv.data[i]); ++i) {
-        result = result * 10 + sv.data[i] - '0';
+        resuvasm = resuvasm * 10 + sv.data[i] - '0';
     }
-    return result;
+    return resuvasm;
 }
 
 //////////// EXEPTION Definitions ////////////
@@ -399,12 +399,6 @@ ExeptionState svm_execInst(SVM* svm)
     return EXEPTION_SATE_OK;
 }
 
-void svm_addInst(SVM* svm, Inst inst)
-{
-    assert(svm->program_size++ < SVM_PROGRAM_CAPACITY);
-    svm->program[svm->program_size++] = inst;
-}
-
 void svm_dumpStack(FILE *stream, const SVM* svm)
 {
     fprintf(stream, "STACK:\n");
@@ -478,7 +472,7 @@ void svm_loadProgramFromFile(SVM* svm, const char* file_path)
     fclose(f);
 }
 
-void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
+void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
 {
     svm->program_size = 0;
 
@@ -491,7 +485,7 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
 
             if (instName.count > 0 && instName.data[instName.count - 1] == ':') {
                 StringView label = (StringView) { .count = instName.count - 1, .data = instName.data };
-                lt_push(lt, label, svm->program_size);
+                vasm_pushLabel(vasm, label, svm->program_size);
                 instName = sv_trim(sv_chopByDelim(&line, ' '));
             }
 
@@ -522,7 +516,7 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
                                 .operand = sv_as_int(operand)
                         };
                     } else {
-                        lt_push_ujmp(lt, svm->program_size, operand);
+                        vasm_pushDeferedOperand(vasm, svm->program_size, operand);
                         svm->program[svm->program_size++] = (Inst) {
                                 .type = INST_JMP
                         };
@@ -536,18 +530,18 @@ void svm_translateSource(StringView source, SVM* svm, LabelTable* lt)
     }
 
     // Pass two
-    for (size_t i = 0; i < lt->unresolvedJmps_size; ++i) {
-        Word addr = lt_find(lt, lt->unresolvedJmps[i].label);
-        svm->program[lt->unresolvedJmps[i].addr].operand = addr;
+    for (size_t i = 0; i < vasm->deferedOperands_size; ++i) {
+        Word addr = vasm_findLabelAddr(vasm, vasm->deferedOperands[i].label);
+        svm->program[vasm->deferedOperands[i].addr].operand = addr;
     }
 }
 
 //////////// Label Definitions ////////////
-Word lt_find(const LabelTable* lt, StringView name)
+Word vasm_findLabelAddr(const Vasm* vasm, StringView name)
 {
-    for (size_t i = 0; i < lt->lables_size; ++i) {
-        if (sv_eq(lt->labels[i].name, name)) {
-            return lt->labels[i].addr;
+    for (size_t i = 0; i < vasm->lables_size; ++i) {
+        if (sv_eq(vasm->labels[i].name, name)) {
+            return vasm->labels[i].addr;
         }
     }
     fprintf(stderr, "ERROR: Label '%.*s' does not exist!\n",
@@ -556,16 +550,16 @@ Word lt_find(const LabelTable* lt, StringView name)
     return -1;
 }
 
-void lt_push(LabelTable* lt, StringView name, Word addr)
+void vasm_pushLabel(Vasm* vasm, StringView name, Word addr)
 {
-    assert(lt->lables_size < LABEL_CAPACITY);
-    lt->labels[lt->lables_size++] = (Label) { .name = name, .addr = addr };
+    assert(vasm->lables_size < LABEL_CAPACITY);
+    vasm->labels[vasm->lables_size++] = (Label) { .name = name, .addr = addr };
 }
 
-void lt_push_ujmp(LabelTable* lt, Word addr, StringView label)
+void vasm_pushDeferedOperand(Vasm* vasm, Word addr, StringView label)
 {
-    assert(lt->unresolvedJmps_size < UNRESOLVED_JMP_CAPACITY);
-    lt->unresolvedJmps[lt->unresolvedJmps_size++] = (UnresolvedJmp) {
+    assert(vasm->deferedOperands_size < DEFERED_OPERANDS_CAPACITY);
+    vasm->deferedOperands[vasm->deferedOperands_size++] = (DeferedOperand) {
         .addr = addr,
         .label = label
     };

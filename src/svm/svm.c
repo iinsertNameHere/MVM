@@ -10,7 +10,7 @@ SVM svm = {0};
 
 //NOTE: GitHub https://github.com/iinsertNameHere/Slick
 
-void usage(FILE* stream)
+static void usage(FILE* stream)
 {
     fprintf(stream, "Usage: svm -i <input.sbc> [options]\n");
     fprintf(stream, "  -h          Provides a help list.\n");

@@ -3,7 +3,7 @@ project(slick)
 
 set(CMAKE_C_STANDARD 11)
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -std=c11 -Wswitch-enum -pedantic ${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS "-Wall -Wextra -std=c11 -Wswitch-enum -Wmissing-prototypes -pedantic ${CMAKE_C_FLAGS}")
 
 add_executable(svm src/svm/svm.c)
 add_executable(vasm src/vasm/vasm.c)

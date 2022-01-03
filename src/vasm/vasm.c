@@ -6,9 +6,12 @@
 #include "../shared.h"
 
 SVM svm = {0};
-LabelTable lt = {0};
+Vasm vasm = {0};
 
-void usage(FILE* stream) {
+// TODO: Watch https://www.youtube.com/watch?v=9td67NTtNCg&list=PLpM-Dvs8t0VY73ytTCQqgvgCWttV3m8LM&index=5 at 3:23:01
+
+static void usage(FILE* stream)
+{
     fprintf(stream, "Usage: vasm <input.vsm> <output.sbc>\n");
 }
 
@@ -31,7 +34,7 @@ int main(int argc, char** argv)
 
     StringView source_code = slurp_file(inputFilePath);
 
-    svm_translateSource(source_code, &svm, &lt);
+    svm_translateSource(source_code, &svm, &vasm);
     svm_saveProgramToFile(&svm, outputFilePath);
 
     return  0;
