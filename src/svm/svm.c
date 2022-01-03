@@ -2,7 +2,7 @@
 // Created by iinsert on 29.12.2021.
 //
 
-#define SVM_IMPLEMENTATION
+#define SVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
 // Slick VM

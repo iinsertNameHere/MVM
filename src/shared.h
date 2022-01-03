@@ -131,7 +131,7 @@ StringView slurp_file(const char* file_path);
 char* shift(int* argc, char*** argv);
 #endif //SVM_SHARED_H
 
-#ifdef SVM_IMPLEMENTATION
+#ifdef SVM_SHARED_IMPLEMENTATION
 
 //////////// Data Definitions ////////////
 StringView cstr_as_sv(const char* cstr)
@@ -618,4 +618,4 @@ char* shift(int* argc, char*** argv)
     *argc -= 1;
     return res;
 }
-#endif //SVM_IMPLEMENTATION
+#endif //SVM_SHARED_IMPLEMENTATION

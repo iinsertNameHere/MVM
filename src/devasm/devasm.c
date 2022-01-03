@@ -2,7 +2,7 @@
 // Created by joona on 30.12.2021.
 //
 
-#define SVM_IMPLEMENTATION
+#define SVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
 SVM svm = {0};
