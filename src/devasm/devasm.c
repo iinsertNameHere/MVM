@@ -20,44 +20,11 @@ int main(int argc, char** argv)
     svm_loadProgramFromFile(&svm, inputFilePath);
 
     for (InstAddr i = 0; i < svm.program_size; ++i) {
-        switch (svm.program[i].type) {
-            case INST_NOP:
-                printf("nop\n");
-                break;
-            case INST_PUSH:
-                printf("push %lld\n", svm.program[i].operand.as_i64);
-                break;
-            case INST_DUP:
-                printf("dup %lld\n", svm.program[i].operand.as_i64);
-                break;
-            case INST_PLUS:
-                printf("plus\n");
-                break;
-            case INST_MINUS:
-                printf("minus\n");
-                break;
-            case INST_MULT:
-                printf("mult\n");
-                break;
-            case INST_DIV:
-                printf("div\n");
-                break;
-            case INST_JMP:
-                printf("jmp %lld\n", svm.program[i].operand.as_i64);
-                break;
-            case INST_JMP_IF:
-                printf("jmpif %lld\n", svm.program[i].operand.as_i64);
-                break;
-            case INST_EQ:
-                printf("eq\n");
-                break;
-            case INST_HALT:
-                printf("halt\n");
-                break;
-            case INST_PRINT_DEBUG:
-                printf("dbgPrint\n");
-                break;
+        printf("%s", InstNames[svm.program[i].type]);
+        if (HasInstOperand[svm.program[i].type]) {
+            printf(" %lld", svm.program[i].operand.as_i64);
         }
+        printf("\n");
     }
 
     return 0;

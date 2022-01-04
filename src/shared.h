@@ -57,16 +57,50 @@ typedef enum {
     INST_NOP = 0,
     INST_PUSH,
     INST_DUP,
-    INST_PLUS,
-    INST_MINUS,
-    INST_MULT,
-    INST_DIV,
+    INST_PLUSI,
+    INST_MINUSI,
+    INST_MULTI,
+    INST_DIVI,
+    // INST_PLUSF,
+    // INST_MINUSF,
+    // INST_MULTF,
+    // INST_DIVF,
     INST_JMP,
     INST_JMP_IF,
     INST_EQ,
     INST_HALT,
     INST_PRINT_DEBUG,
 } Inst_Type;
+
+const char* const InstNames[] = {
+    [INST_NOP]         = "nop",
+    [INST_PUSH]        = "push",
+    [INST_DUP]         = "dup",
+    [INST_PLUSI]       = "plusi",
+    [INST_MINUSI]      = "minusi",
+    [INST_MULTI]       = "multi",
+    [INST_DIVI]        = "divi",
+    [INST_JMP]         = "jmp",
+    [INST_JMP_IF]      = "jmpif",
+    [INST_EQ]          = "eq",
+    [INST_HALT]        = "hlt",
+    [INST_PRINT_DEBUG] = "dbgPrint",
+};
+
+const int  HasInstOperand[] = {
+    [INST_NOP]         = 0,
+    [INST_PUSH]        = 1,
+    [INST_DUP]         = 1,
+    [INST_PLUSI]       = 0,
+    [INST_MINUSI]      = 0,
+    [INST_MULTI]       = 0,
+    [INST_DIVI]        = 0,
+    [INST_JMP]         = 1,
+    [INST_JMP_IF]      = 1,
+    [INST_EQ]          = 0,
+    [INST_HALT]        = 0,
+    [INST_PRINT_DEBUG] = 0,
+};
 
 typedef struct {
     Inst_Type type;
@@ -242,10 +276,10 @@ const char* inst_as_cstr(Inst_Type instType) {
     switch (instType) {
         case INST_NOP:         return "INST_NOP";
         case INST_PUSH:        return "INST_PUSH";
-        case INST_PLUS:        return "INST_PLUS";
-        case INST_MINUS:       return "INST_MINUS";
-        case INST_MULT:        return "INST_MULT";
-        case INST_DIV:         return "INST_DIV";
+        case INST_PLUSI:        return "INST_PLUS";
+        case INST_MINUSI:       return "INST_MINUS";
+        case INST_MULTI:        return "INST_MULT";
+        case INST_DIVI:         return "INST_DIV";
         case INST_JMP:         return "INST_JMP";
         case INST_JMP_IF:      return "INST_JMP_IF";
         case INST_EQ:          return "INST_EQ";
@@ -314,7 +348,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
-        case INST_PLUS: {
+        case INST_PLUSI: {
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
@@ -324,7 +358,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
-        case INST_MINUS: {
+        case INST_MINUSI: {
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
@@ -334,7 +368,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
-        case INST_MULT: {
+        case INST_MULTI: {
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
@@ -344,7 +378,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
-        case INST_DIV: {
+        case INST_DIVI: {
             if (svm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
@@ -506,29 +540,29 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
 
             if (instName.count > 0) {
                 StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
-                if (sv_eq(instName, cstr_as_sv("nop"))) {
+                if (sv_eq(instName, cstr_as_sv(InstNames[INST_NOP]))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_NOP
                     };
-                } else if (sv_eq(instName, cstr_as_sv("push"))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_PUSH]))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PUSH,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
-                } else if (sv_eq(instName, cstr_as_sv("dup"))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_DUP]))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_DUP,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
-                } else if (sv_eq(instName, cstr_as_sv("plus"))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_PLUSI]))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUS
+                            .type = INST_PLUSI
                     };
-                } else if (sv_eq(instName, cstr_as_sv("halt"))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_HALT]))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_HALT
                     };
-                } else if (sv_eq(instName, cstr_as_sv("jmp"))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_JMP]))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         svm->program[svm->program_size++] = (Inst) {
                                 .type = INST_JMP,
