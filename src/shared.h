@@ -57,6 +57,7 @@ typedef enum {
     INST_NOP = 0,
     INST_PUSH,
     INST_DUP,
+    INST_SWAP,
     INST_PLUSI,
     INST_MINUSI,
     INST_MULTI,
@@ -261,6 +262,7 @@ const char* inst_as_cstr(InstType instType) {
         case INST_NOP:         return "INST_NOP";
         case INST_PUSH:        return "INST_PUSH";
         case INST_DUP:         return "INST_DUP";
+        case INST_SWAP:        return "INST_SWAP";
         case INST_PLUSI:       return "INST_PLUSI";
         case INST_MINUSI:      return "INST_MINUSI";
         case INST_MULTI:       return "INST_MULTI";
@@ -288,6 +290,7 @@ const char* InstName(InstType instType)
         case INST_NOP:         return "nop";
         case INST_PUSH:        return "push";
         case INST_DUP:         return "dup";
+        case INST_SWAP:        return "swap";
         case INST_PLUSI:       return "plusi";
         case INST_MINUSI:      return "minusi";
         case INST_MULTI:       return "multi";
@@ -315,6 +318,7 @@ int InstHasOperand(InstType instType)
         case INST_NOP:         return 0;
         case INST_PUSH:        return 1;
         case INST_DUP:         return 1;
+        case INST_SWAP:        return 0;
         case INST_PLUSI:       return 0;
         case INST_MINUSI:      return 0;
         case INST_MULTI:       return 0;
@@ -387,6 +391,17 @@ ExeptionState svm_execInst(SVM* svm)
 
             svm->stack[svm->stack_size] = svm->stack[svm->stack_size - 1 - inst.operand.as_u64];
             svm->stack_size += 1;
+            svm->ip += 1;
+            break;
+        }
+
+        case INST_SWAP: {
+            if (svm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            Word tmp = svm->stack[svm->stack_size - 1];
+            svm->stack[svm->stack_size - 1] = svm->stack[svm->stack_size - 2];
+            svm->stack[svm->stack_size - 2] = tmp;
             svm->ip += 1;
             break;
         }
@@ -660,21 +675,25 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
                             .type = INST_DUP,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_SWAP)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_SWAP,
+                    };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSI)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PLUSI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSI)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_MINUSI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTI)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_MULTI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVI)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_DIVI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSF)))) {
                     svm->program[svm->program_size++] = (Inst) {
@@ -682,15 +701,15 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSF)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_MINUSF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTF)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_MULTF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVF)))) {
                     svm->program[svm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
+                            .type = INST_DIVF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_HALT)))) {
                     svm->program[svm->program_size++] = (Inst) {
