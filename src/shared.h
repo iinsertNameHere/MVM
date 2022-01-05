@@ -61,53 +61,36 @@ typedef enum {
     INST_MINUSI,
     INST_MULTI,
     INST_DIVI,
-    // INST_PLUSF,
-    // INST_MINUSF,
-    // INST_MULTF,
-    // INST_DIVF,
+    INST_PLUSF,
+    INST_MINUSF,
+    INST_MULTF,
+    INST_DIVF,
     INST_JMP,
     INST_JMP_IF,
     INST_EQ,
     INST_HALT,
     INST_PRINT_DEBUG,
-} Inst_Type;
 
-const char* const InstNames[] = {
-    [INST_NOP]         = "nop",
-    [INST_PUSH]        = "push",
-    [INST_DUP]         = "dup",
-    [INST_PLUSI]       = "plusi",
-    [INST_MINUSI]      = "minusi",
-    [INST_MULTI]       = "multi",
-    [INST_DIVI]        = "divi",
-    [INST_JMP]         = "jmp",
-    [INST_JMP_IF]      = "jmpif",
-    [INST_EQ]          = "eq",
-    [INST_HALT]        = "hlt",
-    [INST_PRINT_DEBUG] = "dbgPrint",
-};
+    AMOUNT_OF_INSTS
+} InstType;
 
-const int  HasInstOperand[] = {
-    [INST_NOP]         = 0,
+const char* InstName(InstType instType);
+
+int InstHasOperand(InstType instType);
+
+const int HasInstOperand[AMOUNT_OF_INSTS] = {
     [INST_PUSH]        = 1,
     [INST_DUP]         = 1,
-    [INST_PLUSI]       = 0,
-    [INST_MINUSI]      = 0,
-    [INST_MULTI]       = 0,
-    [INST_DIVI]        = 0,
     [INST_JMP]         = 1,
     [INST_JMP_IF]      = 1,
-    [INST_EQ]          = 0,
-    [INST_HALT]        = 0,
-    [INST_PRINT_DEBUG] = 0,
 };
 
 typedef struct {
-    Inst_Type type;
+    InstType type;
     Word operand;
 } Inst;
 
-const char* inst_as_cstr(Inst_Type instType);
+const char* inst_as_cstr(InstType instType);
 
 #define MAKE_INST_PUSH(value)    {.type = INST_PUSH, .operand = (value)}
 #define MAKE_INST_DUP(stackAddr) {.type = INST_DUP, .operand = (stackAddr)}
@@ -166,6 +149,7 @@ void svm_dumpStack(FILE *stream, const SVM* svm);
 void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size);
 void svm_saveProgramToFile(const SVM* svm, const char* file_path);
 void svm_loadProgramFromFile(SVM* svm, const char* file_path);
+Word numberLiteral_as_Word (StringView sv);
 void svm_translateSource(StringView source, SVM* svm, Vasm* vasm);
 ExeptionState svm_execProgram(SVM* svm, int limit);
 
@@ -272,25 +256,84 @@ const char* exeption_as_cstr(ExeptionState exeption)
 }
 
 //////////// INST Definitions ////////////
-const char* inst_as_cstr(Inst_Type instType) {
+const char* inst_as_cstr(InstType instType) {
     switch (instType) {
         case INST_NOP:         return "INST_NOP";
         case INST_PUSH:        return "INST_PUSH";
-        case INST_PLUSI:        return "INST_PLUS";
-        case INST_MINUSI:       return "INST_MINUS";
-        case INST_MULTI:        return "INST_MULT";
-        case INST_DIVI:         return "INST_DIV";
+        case INST_DUP:         return "INST_DUP";
+        case INST_PLUSI:       return "INST_PLUSI";
+        case INST_MINUSI:      return "INST_MINUSI";
+        case INST_MULTI:       return "INST_MULTI";
+        case INST_DIVI:        return "INST_DIVI";
+        case INST_PLUSF:       return "INST_PLUSF";
+        case INST_MINUSF:      return "INST_MINUSF";
+        case INST_MULTF:       return "INST_MULTF";
+        case INST_DIVF:        return "INST_DIVF";
         case INST_JMP:         return "INST_JMP";
         case INST_JMP_IF:      return "INST_JMP_IF";
         case INST_EQ:          return "INST_EQ";
         case INST_HALT:        return "INST_HALT";
         case INST_PRINT_DEBUG: return "INST_DEBUG";
-        case INST_DUP:         return "INST_DUP";
+        case AMOUNT_OF_INSTS:
         default:
             assert(0 && "inst_as_cstr: Unreachable");
     }
     assert(0 && "inst_as_cstr: Unreachable");
     return "";
+}
+
+const char* InstName(InstType instType)
+{
+    switch (instType) {
+        case INST_NOP:         return "nop";
+        case INST_PUSH:        return "push";
+        case INST_DUP:         return "dup";
+        case INST_PLUSI:       return "plusi";
+        case INST_MINUSI:      return "minusi";
+        case INST_MULTI:       return "multi";
+        case INST_DIVI:        return "divi";
+        case INST_PLUSF:       return "plusf";
+        case INST_MINUSF:      return "minusf";
+        case INST_MULTF:       return "multf";
+        case INST_DIVF:        return "divf";
+        case INST_JMP:         return "jmp";
+        case INST_JMP_IF:      return "jmpif";
+        case INST_EQ:          return "eq";
+        case INST_HALT:        return "hlt";
+        case INST_PRINT_DEBUG: return "dbgPrint";
+        case AMOUNT_OF_INSTS:
+        default:
+            assert(0 && "InstName: Unreachable");
+    }
+    assert(0 && "InstName: Unreachable");
+    return "";
+}
+
+int InstHasOperand(InstType instType)
+{
+    switch (instType) {
+        case INST_NOP:         return 0;
+        case INST_PUSH:        return 1;
+        case INST_DUP:         return 1;
+        case INST_PLUSI:       return 0;
+        case INST_MINUSI:      return 0;
+        case INST_MULTI:       return 0;
+        case INST_DIVI:        return 0;
+        case INST_PLUSF:       return 0;
+        case INST_MINUSF:      return 0;
+        case INST_MULTF:       return 0;
+        case INST_DIVF:        return 0;
+        case INST_JMP:         return 1;
+        case INST_JMP_IF:      return 1;
+        case INST_EQ:          return 0;
+        case INST_HALT:        return 0;
+        case INST_PRINT_DEBUG: return 0;
+        case AMOUNT_OF_INSTS:
+        default:
+            assert(0 && "InstHasOperand: Unreachable");
+    }
+    assert(0 && "InstHasOperand: Unreachable");
+    return 0;
 }
 
 //////////// SVM Definitions ////////////
@@ -391,6 +434,47 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
+        case INST_PLUSF: {
+            if (svm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            svm->stack[svm->stack_size - 2].as_f64 += svm->stack[svm->stack_size - 1].as_f64;
+            svm->stack_size -= 1;
+            svm->ip += 1;
+            break;
+        }
+
+        case INST_MINUSF: {
+            if (svm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            svm->stack[svm->stack_size - 2].as_f64 -= svm->stack[svm->stack_size - 1].as_f64;
+            svm->stack_size -= 1;
+            svm->ip += 1;
+            break;
+        }
+
+        case INST_MULTF: {
+            if (svm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            svm->stack[svm->stack_size - 2].as_f64 *= svm->stack[svm->stack_size - 1].as_f64;
+            svm->stack_size -= 1;
+            svm->ip += 1;
+            break;
+        }
+
+        case INST_DIVF: {
+            if (svm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+
+            svm->stack[svm->stack_size - 2].as_f64 /= svm->stack[svm->stack_size - 1].as_f64 ;
+            svm->stack_size -= 1;
+            svm->ip += 1;
+            break;
+        }
+
         case INST_JMP: {
             svm->ip = inst.operand.as_u64;
             break;
@@ -434,6 +518,7 @@ ExeptionState svm_execInst(SVM* svm)
             break;
         }
 
+        case AMOUNT_OF_INSTS:
         default:
             return EXEPTION_ILLEGAL_INST;
     }
@@ -521,6 +606,27 @@ void svm_loadProgramFromFile(SVM* svm, const char* file_path)
     fclose(f);
 }
 
+Word numberLiteral_as_Word (StringView sv)
+{
+    assert(sv.count < 1024);
+    char cstr[sv.count + 1];
+    memcpy(cstr, sv.data, sv.count);
+    cstr[sv.count] = '\0';
+
+    Word result = {0};
+
+    char* endptr = 0;
+    result.as_u64 = strtoull(cstr, &endptr, 10);
+    if ((size_t)(endptr - cstr) != sv.count) {
+        result.as_f64 = strtod(cstr, &endptr);
+        if ((size_t)(endptr - cstr) != sv.count) {
+            fprintf(stderr, "ERROR: '%s' is not a number literal!", cstr);
+            exit(1);
+        }
+    }
+    return result;
+}
+
 void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
 {
     svm->program_size = 0;
@@ -540,29 +646,57 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
 
             if (instName.count > 0) {
                 StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
-                if (sv_eq(instName, cstr_as_sv(InstNames[INST_NOP]))) {
+                if (sv_eq(instName, cstr_as_sv(InstName(INST_NOP)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_NOP
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_PUSH]))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PUSH)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PUSH,
-                            .operand = { .as_i64 = sv_as_int(operand)}
+                            .operand = numberLiteral_as_Word(operand)
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_DUP]))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DUP)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_DUP,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_PLUSI]))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSI)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_PLUSI
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_HALT]))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSI)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTI)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVI)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSF)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSF
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSF)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTF)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVF)))) {
+                    svm->program[svm->program_size++] = (Inst) {
+                            .type = INST_PLUSI
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_HALT)))) {
                     svm->program[svm->program_size++] = (Inst) {
                             .type = INST_HALT
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstNames[INST_JMP]))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         svm->program[svm->program_size++] = (Inst) {
                                 .type = INST_JMP,

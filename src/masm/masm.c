@@ -10,7 +10,7 @@ Vasm vasm = {0};
 
 static void usage(FILE* stream)
 {
-    fprintf(stream, "Usage: vasm <input.vsm> <output.sbc>\n");
+    fprintf(stream, "Usage: masm <input.vsm> <output.sbc>\n");
 }
 
 int main(int argc, char** argv)

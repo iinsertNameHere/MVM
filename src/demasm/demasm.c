@@ -11,7 +11,7 @@ int main(int argc, char** argv)
 {
     if (argc < 2) {
         fprintf(stderr, "ERROR: Expected input!\n");
-        fprintf(stderr, "Usage: desasm <input.sbc>\n");
+        fprintf(stderr, "Usage: demasm <input.sbc>\n");
         exit(1);
     }
 
@@ -20,11 +20,12 @@ int main(int argc, char** argv)
     svm_loadProgramFromFile(&svm, inputFilePath);
 
     for (InstAddr i = 0; i < svm.program_size; ++i) {
-        printf("%s", InstNames[svm.program[i].type]);
+        printf(InstName(svm.program[i].type));
         if (HasInstOperand[svm.program[i].type]) {
-            printf(" %lld", svm.program[i].operand.as_i64);
+            printf(" %lld\n", svm.program[i].operand.as_i64);
+        } else {
+            printf("\n");
         }
-        printf("\n");
     }
 
     return 0;
