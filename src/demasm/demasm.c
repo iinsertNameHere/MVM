@@ -2,27 +2,27 @@
 // Created by joona on 30.12.2021.
 //
 
-#define SVM_SHARED_IMPLEMENTATION
+#define MVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
-SVM svm = {0};
+MVM mvm = {0};
 
 int main(int argc, char** argv)
 {
     if (argc < 2) {
         fprintf(stderr, "ERROR: Expected input!\n");
-        fprintf(stderr, "Usage: demasm <input.sbc>\n");
+        fprintf(stderr, "Usage: demasm <input.mbc>\n");
         exit(1);
     }
 
     const char* inputFilePath = argv[1];
 
-    svm_loadProgramFromFile(&svm, inputFilePath);
+    mvm_loadProgramFromFile(&mvm, inputFilePath);
 
-    for (InstAddr i = 0; i < svm.program_size; ++i) {
-        printf(InstName(svm.program[i].type));
-        if (HasInstOperand[svm.program[i].type]) {
-            printf(" %lld\n", svm.program[i].operand.as_i64);
+    for (InstAddr i = 0; i < mvm.program_size; ++i) {
+        printf(InstName(mvm.program[i].type));
+        if (InstHasOperand(mvm.program[i].type)) {
+            printf(" %lld\n", mvm.program[i].operand.as_i64);
         } else {
             printf("\n");
         }

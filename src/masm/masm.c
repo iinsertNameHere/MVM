@@ -2,15 +2,15 @@
 // Created by iinsert on 29.12.2021.
 //
 
-#define SVM_SHARED_IMPLEMENTATION
+#define MVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
-SVM svm = {0};
+MVM mvm = {0};
 Vasm vasm = {0};
 
 static void usage(FILE* stream)
 {
-    fprintf(stream, "Usage: masm <input.vsm> <output.sbc>\n");
+    fprintf(stream, "Usage: masm <input.msm> <output.mbc>\n");
 }
 
 int main(int argc, char** argv)
@@ -32,8 +32,8 @@ int main(int argc, char** argv)
 
     StringView source_code = slurp_file(inputFilePath);
 
-    svm_translateSource(source_code, &svm, &vasm);
-    svm_saveProgramToFile(&svm, outputFilePath);
+    mvm_translateSource(source_code, &mvm, &vasm);
+    mvm_saveProgramToFile(&mvm, outputFilePath);
 
     return  0;
 }

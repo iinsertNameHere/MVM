@@ -2,8 +2,8 @@
 // Created by iinsert on 29.12.2021.
 //
 
-#ifndef SVM_SHARED_H
-#define SVM_SHARED_H
+#ifndef MVM_SHARED_H
+#define MVM_SHARED_H
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -24,7 +24,7 @@ typedef union {
     void* as_ptr;
 } Word;
 
-static_assert(sizeof(Word) == 8, "The SVM's Word is expected to be 64 bits!");
+static_assert(sizeof(Word) == 8, "The MVM's Word is expected to be 64 bits!");
 
 typedef struct {
     size_t count;
@@ -69,6 +69,8 @@ typedef enum {
     INST_JMP,
     INST_JMP_IF,
     INST_EQ,
+    INST_NOT,
+    INST_GEF,
     INST_HALT,
     INST_PRINT_DEBUG,
 
@@ -78,13 +80,6 @@ typedef enum {
 const char* InstName(InstType instType);
 
 int InstHasOperand(InstType instType);
-
-const int HasInstOperand[AMOUNT_OF_INSTS] = {
-    [INST_PUSH]        = 1,
-    [INST_DUP]         = 1,
-    [INST_JMP]         = 1,
-    [INST_JMP_IF]      = 1,
-};
 
 typedef struct {
     InstType type;
@@ -130,36 +125,36 @@ InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name);
 void vasm_pushLabel(Vasm* vasm, StringView name, InstAddr addr);
 void vasm_pushDeferredOperand(Vasm* vasm, InstAddr addr, StringView label);
 
-//////////// SVM Definitions ////////////
-#define SVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
-#define SVM_PROGRAM_CAPACITY 1024
+//////////// MVM Definitions ////////////
+#define MVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
+#define MVM_PROGRAM_CAPACITY 1024
 
 typedef struct {
-    Word stack[SVM_STACK_CAPACITY];
+    Word stack[MVM_STACK_CAPACITY];
     uint64_t stack_size;
 
-    Inst program[SVM_PROGRAM_CAPACITY];
+    Inst program[MVM_PROGRAM_CAPACITY];
     uint64_t program_size;
     InstAddr ip;
 
     int halt;
-} SVM;
+} MVM;
 
-ExeptionState svm_execInst(SVM* svm);
-void svm_dumpStack(FILE *stream, const SVM* svm);
-void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size);
-void svm_saveProgramToFile(const SVM* svm, const char* file_path);
-void svm_loadProgramFromFile(SVM* svm, const char* file_path);
+ExeptionState mvm_execInst(MVM* mvm);
+void mvm_dumpStack(FILE *stream, const MVM* mvm);
+void mvm_loadProgramFromMemory(MVM* mvm, Inst* program, size_t program_size);
+void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
+void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 Word numberLiteral_as_Word (StringView sv);
-void svm_translateSource(StringView source, SVM* svm, Vasm* vasm);
-ExeptionState svm_execProgram(SVM* svm, int limit);
+void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm);
+ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 //////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path);
 char* shift(int* argc, char*** argv);
-#endif //SVM_SHARED_H
+#endif //MVM_SHARED_H
 
-#ifdef SVM_SHARED_IMPLEMENTATION
+#ifdef MVM_SHARED_IMPLEMENTATION
 
 //////////// Data Definitions ////////////
 StringView cstr_as_sv(const char* cstr)
@@ -274,6 +269,8 @@ const char* inst_as_cstr(InstType instType) {
         case INST_JMP:         return "INST_JMP";
         case INST_JMP_IF:      return "INST_JMP_IF";
         case INST_EQ:          return "INST_EQ";
+        case INST_NOT:         return "INST_NOT";
+        case INST_GEF:         return "INST_GEF";
         case INST_HALT:        return "INST_HALT";
         case INST_PRINT_DEBUG: return "INST_DEBUG";
         case AMOUNT_OF_INSTS:
@@ -302,6 +299,8 @@ const char* InstName(InstType instType)
         case INST_JMP:         return "jmp";
         case INST_JMP_IF:      return "jmpif";
         case INST_EQ:          return "eq";
+        case INST_NOT:         return "not";
+        case INST_GEF:         return "gef";
         case INST_HALT:        return "hlt";
         case INST_PRINT_DEBUG: return "dbgPrint";
         case AMOUNT_OF_INSTS:
@@ -318,7 +317,7 @@ int InstHasOperand(InstType instType)
         case INST_NOP:         return 0;
         case INST_PUSH:        return 1;
         case INST_DUP:         return 1;
-        case INST_SWAP:        return 0;
+        case INST_SWAP:        return 1;
         case INST_PLUSI:       return 0;
         case INST_MINUSI:      return 0;
         case INST_MULTI:       return 0;
@@ -330,6 +329,8 @@ int InstHasOperand(InstType instType)
         case INST_JMP:         return 1;
         case INST_JMP_IF:      return 1;
         case INST_EQ:          return 0;
+        case INST_NOT:         return 0;
+        case INST_GEF:         return 0;
         case INST_HALT:        return 0;
         case INST_PRINT_DEBUG: return 0;
         case AMOUNT_OF_INSTS:
@@ -340,15 +341,15 @@ int InstHasOperand(InstType instType)
     return 0;
 }
 
-//////////// SVM Definitions ////////////
-ExeptionState svm_execProgram(SVM* svm, int limit)
+//////////// MVM Definitions ////////////
+ExeptionState mvm_execProgram(MVM* mvm, int limit)
 {
-    while (limit != 0 && !svm->halt) {
-        ExeptionState err = svm_execInst(svm);
-        if (svm->stack_size > SVM_STACK_CAPACITY) {
+    while (limit != 0 && !mvm->halt) {
+        ExeptionState err = mvm_execInst(mvm);
+        if (mvm->stack_size > MVM_STACK_CAPACITY) {
             return EXEPTION_STACK_OVERFLOW;
         }
-        //svm_dumpStack(stdout, svm);
+        //mvm_dumpStack(stdout, mvm);
         if (err != EXEPTION_SATE_OK) {
             return err;
         }
@@ -359,177 +360,206 @@ ExeptionState svm_execProgram(SVM* svm, int limit)
     return EXEPTION_SATE_OK;
 }
 
-ExeptionState svm_execInst(SVM* svm)
+ExeptionState mvm_execInst(MVM* mvm)
 {
-    if (svm->ip >= svm->program_size) {
+    if (mvm->ip >= mvm->program_size) {
         return EXEPTION_ILLEGAL_INST_ACCESS;
     }
 
-    Inst inst = svm->program[svm->ip];
+    Inst inst = mvm->program[mvm->ip];
 
     switch (inst.type) {
         case INST_NOP: {
-            svm->ip += 1;
+            mvm->ip += 1;
             break;
         }
         case INST_PUSH: {
-            if (svm->stack_size >= SVM_STACK_CAPACITY) {
+            if (mvm->stack_size >= MVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
-            svm->stack[svm->stack_size++] = inst.operand;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size++] = inst.operand;
+            mvm->ip += 1;
             break;
         }
 
         case INST_DUP: {
-            if (svm->stack_size > SVM_STACK_CAPACITY) {
+            if (mvm->stack_size > MVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
-            if (svm->stack_size - inst.operand.as_u64 <= 0) {
+            if (mvm->stack_size - inst.operand.as_u64 <= 0) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
 
-            svm->stack[svm->stack_size] = svm->stack[svm->stack_size - 1 - inst.operand.as_u64];
-            svm->stack_size += 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size] = mvm->stack[mvm->stack_size - 1 - inst.operand.as_u64];
+            mvm->stack_size += 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_SWAP: {
-            if (svm->stack_size < 2) {
+            if (inst.operand.as_u64 >= mvm->stack_size) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            Word tmp = svm->stack[svm->stack_size - 1];
-            svm->stack[svm->stack_size - 1] = svm->stack[svm->stack_size - 2];
-            svm->stack[svm->stack_size - 2] = tmp;
-            svm->ip += 1;
+            const uint64_t a = mvm->stack_size - 1;
+            const uint64_t b = mvm->stack_size - 1 - inst.operand.as_u64;
+            Word tmp = mvm->stack[a];
+            mvm->stack[a] = mvm->stack[b];
+            mvm->stack[b] = tmp;
+            mvm->ip += 1;
             break;
         }
 
         case INST_PLUSI: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_u64 += svm->stack[svm->stack_size - 1].as_u64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_u64 += mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_MINUSI: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_u64 -= svm->stack[svm->stack_size - 1].as_u64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_u64 -= mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_MULTI: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_u64 *= svm->stack[svm->stack_size - 1].as_u64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_u64 *= mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_DIVI: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            if (svm->stack[svm->stack_size - 1].as_u64 == 0) {
+            if (mvm->stack[mvm->stack_size - 1].as_u64 == 0) {
                 return EXEPTION_DIV_BY_ZERO;
             }
-            svm->stack[svm->stack_size - 2].as_u64 /= svm->stack[svm->stack_size - 1].as_u64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_u64 /= mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_PLUSF: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_f64 += svm->stack[svm->stack_size - 1].as_f64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_f64 += mvm->stack[mvm->stack_size - 1].as_f64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_MINUSF: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_f64 -= svm->stack[svm->stack_size - 1].as_f64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_f64 -= mvm->stack[mvm->stack_size - 1].as_f64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_MULTF: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_f64 *= svm->stack[svm->stack_size - 1].as_f64;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_f64 *= mvm->stack[mvm->stack_size - 1].as_f64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_DIVF: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
 
-            svm->stack[svm->stack_size - 2].as_f64 /= svm->stack[svm->stack_size - 1].as_f64 ;
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_f64 /= mvm->stack[mvm->stack_size - 1].as_f64 ;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_JMP: {
-            svm->ip = inst.operand.as_u64;
+            mvm->ip = inst.operand.as_u64;
             break;
         }
 
         case INST_HALT: {
-            svm->halt = 1;
+            mvm->halt = 1;
             break;
         }
 
         case INST_EQ: {
-            if (svm->stack_size < 2) {
+            if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            svm->stack[svm->stack_size - 2].as_u64 = (svm->stack[svm->stack_size - 1].as_u64 == svm->stack[svm->stack_size - 2].as_u64);
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            mvm->stack[mvm->stack_size - 2].as_u64 = (mvm->stack[mvm->stack_size - 1].as_u64 == mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_NOT: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 1].as_u64 = !mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_GEF: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 >= mvm->stack[mvm->stack_size - 2].as_f64);
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
         case INST_JMP_IF: {
-            if (svm->stack_size < 1) {
+            if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            if (svm->stack[svm->stack_size - 1].as_u64) {
-                svm->stack_size -= 1;
-                svm->ip = inst.operand.as_u64;
+            if (mvm->stack[mvm->stack_size - 1].as_u64) {
+                mvm->ip = inst.operand.as_u64;
             } else {
-                svm->ip += 1;
+                mvm->ip += 1;
             }
+            mvm->stack_size -= 1;
             break;
         }
 
         case INST_PRINT_DEBUG: {
-            if (svm->stack_size < 1) {
+            if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            printf("%llu\n", svm->stack[svm->stack_size-1].as_u64);
-            svm->stack_size -= 1;
-            svm->ip += 1;
+            printf("  u64: %llu | i64: %lld | f64: %lf",
+                    mvm->stack[mvm->stack_size - 1].as_u64,
+                    mvm->stack[mvm->stack_size - 1].as_i64,
+                    mvm->stack[mvm->stack_size - 1].as_f64);
+            if ((uintptr_t)mvm->stack[mvm->stack_size].as_ptr > 0) {
+                printf(" | ptr: 0x%llx\n", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
+            } else {
+                printf(" | ptr: (nil)\n");
+            }
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
             break;
         }
 
@@ -540,17 +570,17 @@ ExeptionState svm_execInst(SVM* svm)
     return EXEPTION_SATE_OK;
 }
 
-void svm_dumpStack(FILE *stream, const SVM* svm)
+void mvm_dumpStack(FILE *stream, const MVM* mvm)
 {
     fprintf(stream, "STACK:\n");
-    if (svm->stack_size > 0) {
-        for (InstAddr i = 0; i < svm->stack_size; ++i) {
+    if (mvm->stack_size > 0) {
+        for (InstAddr i = 0; i < mvm->stack_size; ++i) {
             fprintf(stream, "  u64: %llu | i64: %lld | f64: %lf",
-                    svm->stack[i].as_u64,
-                    svm->stack[i].as_i64,
-                    svm->stack[i].as_f64);
-            if ((uintptr_t)svm->stack[i].as_ptr > 0) {
-                fprintf(stream, " | ptr: 0x%llx\n", (uintptr_t) svm->stack[i].as_ptr);
+                    mvm->stack[i].as_u64,
+                    mvm->stack[i].as_i64,
+                    mvm->stack[i].as_f64);
+            if ((uintptr_t)mvm->stack[i].as_ptr > 0) {
+                fprintf(stream, " | ptr: 0x%llx\n", (uintptr_t) mvm->stack[i].as_ptr);
             } else {
                 fprintf(stream, " | ptr: (nil)\n");
             }
@@ -560,14 +590,14 @@ void svm_dumpStack(FILE *stream, const SVM* svm)
     }
 }
 
-void svm_loadProgramFromMemory(SVM* svm, Inst* program, size_t program_size)
+void mvm_loadProgramFromMemory(MVM* mvm, Inst* program, size_t program_size)
 {
-    assert(program_size < SVM_PROGRAM_CAPACITY);
-    memcpy(svm->program, program, sizeof(program[0]) * program_size);
-    svm->program_size = program_size;
+    assert(program_size < MVM_PROGRAM_CAPACITY);
+    memcpy(mvm->program, program, sizeof(program[0]) * program_size);
+    mvm->program_size = program_size;
 }
 
-void svm_saveProgramToFile(const SVM* svm, const char* file_path)
+void mvm_saveProgramToFile(const MVM* mvm, const char* file_path)
 {
     FILE* f = fopen(file_path, "wb");
     if (f == NULL) {
@@ -575,7 +605,7 @@ void svm_saveProgramToFile(const SVM* svm, const char* file_path)
         exit(1);
     }
 
-    fwrite(svm->program, sizeof(svm->program[0]), svm->program_size, f);
+    fwrite(mvm->program, sizeof(mvm->program[0]), mvm->program_size, f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
@@ -584,7 +614,7 @@ void svm_saveProgramToFile(const SVM* svm, const char* file_path)
     fclose(f);
 }
 
-void svm_loadProgramFromFile(SVM* svm, const char* file_path)
+void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
 {
     FILE* f = fopen(file_path, "rb");
     if (f == NULL) {
@@ -603,20 +633,20 @@ void svm_loadProgramFromFile(SVM* svm, const char* file_path)
         exit(1);
     }
 
-    assert(m % sizeof(svm->program[0]) == 0);
-    assert((size_t) m <= SVM_PROGRAM_CAPACITY * sizeof(svm->program[0]));
+    assert(m % sizeof(mvm->program[0]) == 0);
+    assert((size_t) m <= MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0]));
 
     if (fseek(f, 0, SEEK_SET) < 0) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
     }
 
-    size_t size = fread(svm->program, sizeof(svm->program[0]), m / sizeof(svm->program[0]), f);
+    size_t size = fread(mvm->program, sizeof(mvm->program[0]), m / sizeof(mvm->program[0]), f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
     }
-    svm->program_size = (int)size;
+    mvm->program_size = (int)size;
 
     fclose(f);
 }
@@ -642,89 +672,119 @@ Word numberLiteral_as_Word (StringView sv)
     return result;
 }
 
-void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
+void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
 {
-    svm->program_size = 0;
+    mvm->program_size = 0;
 
     // Pass one
     while (source.count > 0) {
-        assert(svm->program_size < SVM_PROGRAM_CAPACITY);
+        assert(mvm->program_size < MVM_PROGRAM_CAPACITY);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
         if (line.count > 0 && *line.data != '#') {
             StringView  instName = sv_chopByDelim(&line, ' ');
 
             if (instName.count > 0 && instName.data[instName.count - 1] == ':') {
                 StringView label = (StringView) { .count = instName.count - 1, .data = instName.data };
-                vasm_pushLabel(vasm, label, svm->program_size);
+                vasm_pushLabel(vasm, label, mvm->program_size);
                 instName = sv_trim(sv_chopByDelim(&line, ' '));
             }
 
             if (instName.count > 0) {
                 StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
                 if (sv_eq(instName, cstr_as_sv(InstName(INST_NOP)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_NOP
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PUSH)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_PUSH,
                             .operand = numberLiteral_as_Word(operand)
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DUP)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_DUP,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_SWAP)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_SWAP,
+                            .operand = { .as_i64 = sv_as_int(operand)}
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSI)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_PLUSI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSI)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_MINUSI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTI)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_MULTI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVI)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_DIVI
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSF)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_PLUSF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSF)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_MINUSF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTF)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_MULTF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVF)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_DIVF
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_HALT)))) {
-                    svm->program[svm->program_size++] = (Inst) {
+                    mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_HALT
                     };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_EQ)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_EQ
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_NOT)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_NOT
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_GEF)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_GEF
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PRINT_DEBUG)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_PRINT_DEBUG
+                    };
+
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
-                        svm->program[svm->program_size++] = (Inst) {
+                        mvm->program[mvm->program_size++] = (Inst) {
                                 .type = INST_JMP,
                                 .operand = { .as_i64 = sv_as_int(operand)}
                         };
                     } else {
-                        vasm_pushDeferredOperand(vasm, svm->program_size, operand);
-                        svm->program[svm->program_size++] = (Inst) {
+                        vasm_pushDeferredOperand(vasm, mvm->program_size, operand);
+                        mvm->program[mvm->program_size++] = (Inst) {
                                 .type = INST_JMP
+                        };
+                    }
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP_IF)))) {
+                    if (operand.count > 0 && isdigit(*operand.data)) {
+                        mvm->program[mvm->program_size++] = (Inst) {
+                                .type = INST_JMP_IF,
+                                .operand = { .as_i64 = sv_as_int(operand)}
+                        };
+                    } else {
+                        vasm_pushDeferredOperand(vasm, mvm->program_size, operand);
+                        mvm->program[mvm->program_size++] = (Inst) {
+                                .type = INST_JMP_IF
                         };
                     }
                 } else {
@@ -738,7 +798,7 @@ void svm_translateSource(StringView source, SVM* svm, Vasm* vasm)
     // Pass two
     for (size_t i = 0; i < vasm->deferredOperands_size; ++i) {
         InstAddr addr = vasm_findLabelAddr(vasm, vasm->deferredOperands[i].label);
-        svm->program[vasm->deferredOperands[i].addr].operand.as_u64 = addr;
+        mvm->program[vasm->deferredOperands[i].addr].operand.as_u64 = addr;
     }
 }
 
@@ -824,4 +884,4 @@ char* shift(int* argc, char*** argv)
     *argc -= 1;
     return res;
 }
-#endif //SVM_SHARED_IMPLEMENTATION
+#endif //MVM_SHARED_IMPLEMENTATION
