@@ -32,7 +32,7 @@ typedef struct {
 } StringView;
 
 StringView cstr_as_sv(const char* cstr);
-StringView sv_vasmrim(StringView sv);
+StringView sv_masmrim(StringView sv);
 StringView sv_rtrim(StringView sv);
 StringView sv_trim(StringView sv);
 StringView sv_chopByDelim(StringView* sv, char delim);
@@ -67,14 +67,13 @@ typedef enum {
     INST_MULTF,
     INST_DIVF,
     INST_JMP,
-    INST_JMP_IF,
+    INST_JMPIF,
+    INST_RET,
     INST_EQ,
     INST_NOT,
     INST_GEF,
     INST_HALT,
-    INST_PRINT_DEBUG,
-
-    AMOUNT_OF_INSTS
+    INST_DBGPRINT
 } InstType;
 
 const char* InstName(InstType instType);
@@ -85,20 +84,6 @@ typedef struct {
     InstType type;
     Word operand;
 } Inst;
-
-const char* inst_as_cstr(InstType instType);
-
-#define MAKE_INST_PUSH(value)    {.type = INST_PUSH, .operand = (value)}
-#define MAKE_INST_DUP(stackAddr) {.type = INST_DUP, .operand = (stackAddr)}
-#define MAKE_INST_PLUS           {.type = INST_PLUS}
-#define MAKE_INST_MINUS          {.type = INST_MINUS}
-#define MAKE_INST_MULT           {.type = INST_MULT}
-#define MAKE_INST_DIV            {.type = INST_DIV}
-#define MAKE_INST_JMP(addr)      {.type = INST_JMP, .operand = (addr)}
-#define MAKE_INST_HALT           {.type = INST_HALT}
-
-#define CONSTRUCT_INST(instType)                (Inst) {.type = (instType)}
-#define CONSTRUCT_OPERAND_INST(instType, value) (Inst) {.type = (instType), .operand = (value)}
 
 //////////// Label Definitions ////////////
 #define LABEL_CAPACITY 1024
@@ -119,11 +104,11 @@ typedef struct {
     size_t lables_size;
     DeferredOperand deferredOperands[DEFERED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
-} Vasm;
+} Masm;
 
-InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name);
-void vasm_pushLabel(Vasm* vasm, StringView name, InstAddr addr);
-void vasm_pushDeferredOperand(Vasm* vasm, InstAddr addr, StringView label);
+InstAddr masm_findLabelAddr(const Masm* masm, StringView name);
+void masm_pushLabel(Masm* masm, StringView name, InstAddr addr);
+void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 
 //////////// MVM Definitions ////////////
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
@@ -142,11 +127,10 @@ typedef struct {
 
 ExeptionState mvm_execInst(MVM* mvm);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
-void mvm_loadProgramFromMemory(MVM* mvm, Inst* program, size_t program_size);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 Word numberLiteral_as_Word (StringView sv);
-void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm);
+void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 //////////// Util Definitions ////////////
@@ -165,7 +149,7 @@ StringView cstr_as_sv(const char* cstr)
     };
 }
 
-StringView sv_vasmrim(StringView sv)
+StringView sv_masmrim(StringView sv)
 {
     size_t i = 0;
     while (i < sv.count && isspace(sv.data[i])) {
@@ -191,7 +175,7 @@ StringView sv_rtrim(StringView sv)
 
 StringView sv_trim(StringView sv)
 {
-    return sv_vasmrim(sv_rtrim(sv));
+    return sv_masmrim(sv_rtrim(sv));
 }
 
 StringView sv_chopByDelim(StringView* sv, char delim)
@@ -200,7 +184,7 @@ StringView sv_chopByDelim(StringView* sv, char delim)
     while (i < sv->count && sv->data[i] != delim) {
         i += 1;
     }
-    StringView resuvasm = {
+    StringView resumasm = {
             .count = i,
             .data = sv->data
     };
@@ -211,7 +195,7 @@ StringView sv_chopByDelim(StringView* sv, char delim)
         sv->count -= i;
         sv->data  += i;
     }
-    return resuvasm;
+    return resumasm;
 }
 
 int sv_eq(StringView a, StringView b)
@@ -226,11 +210,11 @@ int sv_eq(StringView a, StringView b)
 
 int sv_as_int(StringView sv)
 {
-    int resuvasm = 0;
+    int resumasm = 0;
     for (size_t i = 0; i < sv.count && isdigit(sv.data[i]); ++i) {
-        resuvasm = resuvasm * 10 + sv.data[i] - '0';
+        resumasm = resumasm * 10 + sv.data[i] - '0';
     }
-    return resuvasm;
+    return resumasm;
 }
 
 //////////// EXEPTION Definitions ////////////
@@ -252,35 +236,6 @@ const char* exeption_as_cstr(ExeptionState exeption)
 }
 
 //////////// INST Definitions ////////////
-const char* inst_as_cstr(InstType instType) {
-    switch (instType) {
-        case INST_NOP:         return "INST_NOP";
-        case INST_PUSH:        return "INST_PUSH";
-        case INST_DUP:         return "INST_DUP";
-        case INST_SWAP:        return "INST_SWAP";
-        case INST_PLUSI:       return "INST_PLUSI";
-        case INST_MINUSI:      return "INST_MINUSI";
-        case INST_MULTI:       return "INST_MULTI";
-        case INST_DIVI:        return "INST_DIVI";
-        case INST_PLUSF:       return "INST_PLUSF";
-        case INST_MINUSF:      return "INST_MINUSF";
-        case INST_MULTF:       return "INST_MULTF";
-        case INST_DIVF:        return "INST_DIVF";
-        case INST_JMP:         return "INST_JMP";
-        case INST_JMP_IF:      return "INST_JMP_IF";
-        case INST_EQ:          return "INST_EQ";
-        case INST_NOT:         return "INST_NOT";
-        case INST_GEF:         return "INST_GEF";
-        case INST_HALT:        return "INST_HALT";
-        case INST_PRINT_DEBUG: return "INST_DEBUG";
-        case AMOUNT_OF_INSTS:
-        default:
-            assert(0 && "inst_as_cstr: Unreachable");
-    }
-    assert(0 && "inst_as_cstr: Unreachable");
-    return "";
-}
-
 const char* InstName(InstType instType)
 {
     switch (instType) {
@@ -297,13 +252,13 @@ const char* InstName(InstType instType)
         case INST_MULTF:       return "multf";
         case INST_DIVF:        return "divf";
         case INST_JMP:         return "jmp";
-        case INST_JMP_IF:      return "jmpif";
+        case INST_JMPIF:       return "jmpif";
+        case INST_RET:         return "ret";
         case INST_EQ:          return "eq";
         case INST_NOT:         return "not";
         case INST_GEF:         return "gef";
         case INST_HALT:        return "hlt";
-        case INST_PRINT_DEBUG: return "dbgPrint";
-        case AMOUNT_OF_INSTS:
+        case INST_DBGPRINT: return "dbgPrint";
         default:
             assert(0 && "InstName: Unreachable");
     }
@@ -327,13 +282,13 @@ int InstHasOperand(InstType instType)
         case INST_MULTF:       return 0;
         case INST_DIVF:        return 0;
         case INST_JMP:         return 1;
-        case INST_JMP_IF:      return 1;
+        case INST_JMPIF:       return 1;
+        case INST_RET:         return 0;
         case INST_EQ:          return 0;
         case INST_NOT:         return 0;
         case INST_GEF:         return 0;
         case INST_HALT:        return 0;
-        case INST_PRINT_DEBUG: return 0;
-        case AMOUNT_OF_INSTS:
+        case INST_DBGPRINT: return 0;
         default:
             assert(0 && "InstHasOperand: Unreachable");
     }
@@ -498,6 +453,28 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
+        case INST_JMPIF: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            if (mvm->stack[mvm->stack_size - 1].as_u64) {
+                mvm->ip = inst.operand.as_u64;
+            } else {
+                mvm->ip += 1;
+            }
+            mvm->stack_size -= 1;
+            break;
+        }
+
+        case INST_RET: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->ip = mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            break;
+        }
+
         case INST_HALT: {
             mvm->halt = 1;
             break;
@@ -532,20 +509,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
-        case INST_JMP_IF: {
-            if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
-            }
-            if (mvm->stack[mvm->stack_size - 1].as_u64) {
-                mvm->ip = inst.operand.as_u64;
-            } else {
-                mvm->ip += 1;
-            }
-            mvm->stack_size -= 1;
-            break;
-        }
-
-        case INST_PRINT_DEBUG: {
+        case INST_DBGPRINT: {
             if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
@@ -563,7 +527,6 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
-        case AMOUNT_OF_INSTS:
         default:
             return EXEPTION_ILLEGAL_INST;
     }
@@ -588,13 +551,6 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
     } else {
         fprintf(stream, " [empty]\n");
     }
-}
-
-void mvm_loadProgramFromMemory(MVM* mvm, Inst* program, size_t program_size)
-{
-    assert(program_size < MVM_PROGRAM_CAPACITY);
-    memcpy(mvm->program, program, sizeof(program[0]) * program_size);
-    mvm->program_size = program_size;
 }
 
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path)
@@ -672,7 +628,7 @@ Word numberLiteral_as_Word (StringView sv)
     return result;
 }
 
-void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
+void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
 {
     mvm->program_size = 0;
 
@@ -685,7 +641,7 @@ void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
 
             if (instName.count > 0 && instName.data[instName.count - 1] == ':') {
                 StringView label = (StringView) { .count = instName.count - 1, .data = instName.data };
-                vasm_pushLabel(vasm, label, mvm->program_size);
+                masm_pushLabel(masm, label, mvm->program_size);
                 instName = sv_trim(sv_chopByDelim(&line, ' '));
             }
 
@@ -758,9 +714,13 @@ void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_GEF
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PRINT_DEBUG)))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DBGPRINT)))) {
                     mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_PRINT_DEBUG
+                            .type = INST_DBGPRINT
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_RET)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_RET
                     };
 
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP)))) {
@@ -770,21 +730,21 @@ void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
                                 .operand = { .as_i64 = sv_as_int(operand)}
                         };
                     } else {
-                        vasm_pushDeferredOperand(vasm, mvm->program_size, operand);
+                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
                         mvm->program[mvm->program_size++] = (Inst) {
                                 .type = INST_JMP
                         };
                     }
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP_IF)))) {
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMPIF)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMP_IF,
+                                .type = INST_JMPIF,
                                 .operand = { .as_i64 = sv_as_int(operand)}
                         };
                     } else {
-                        vasm_pushDeferredOperand(vasm, mvm->program_size, operand);
+                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
                         mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMP_IF
+                                .type = INST_JMPIF
                         };
                     }
                 } else {
@@ -796,18 +756,18 @@ void mvm_translateSource(StringView source, MVM* mvm, Vasm* vasm)
     }
 
     // Pass two
-    for (size_t i = 0; i < vasm->deferredOperands_size; ++i) {
-        InstAddr addr = vasm_findLabelAddr(vasm, vasm->deferredOperands[i].label);
-        mvm->program[vasm->deferredOperands[i].addr].operand.as_u64 = addr;
+    for (size_t i = 0; i < masm->deferredOperands_size; ++i) {
+        InstAddr addr = masm_findLabelAddr(masm, masm->deferredOperands[i].label);
+        mvm->program[masm->deferredOperands[i].addr].operand.as_u64 = addr;
     }
 }
 
 //////////// Label Definitions ////////////
-InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name)
+InstAddr masm_findLabelAddr(const Masm* masm, StringView name)
 {
-    for (size_t i = 0; i < vasm->lables_size; ++i) {
-        if (sv_eq(vasm->labels[i].name, name)) {
-            return vasm->labels[i].addr;
+    for (size_t i = 0; i < masm->lables_size; ++i) {
+        if (sv_eq(masm->labels[i].name, name)) {
+            return masm->labels[i].addr;
         }
     }
     fprintf(stderr, "ERROR: Label '%.*s' does not exist!\n",
@@ -816,16 +776,16 @@ InstAddr vasm_findLabelAddr(const Vasm* vasm, StringView name)
     return -1;
 }
 
-void vasm_pushLabel(Vasm* vasm, StringView name, InstAddr addr)
+void masm_pushLabel(Masm* masm, StringView name, InstAddr addr)
 {
-    assert(vasm->lables_size < LABEL_CAPACITY);
-    vasm->labels[vasm->lables_size++] = (Label) { .name = name, .addr = addr };
+    assert(masm->lables_size < LABEL_CAPACITY);
+    masm->labels[masm->lables_size++] = (Label) { .name = name, .addr = addr };
 }
 
-void vasm_pushDeferredOperand(Vasm* vasm, InstAddr addr, StringView label)
+void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 {
-    assert(vasm->deferredOperands_size < DEFERED_OPERANDS_CAPACITY);
-    vasm->deferredOperands[vasm->deferredOperands_size++] = (DeferredOperand) {
+    assert(masm->deferredOperands_size < DEFERED_OPERANDS_CAPACITY);
+    masm->deferredOperands[masm->deferredOperands_size++] = (DeferredOperand) {
         .addr = addr,
         .label = label
     };

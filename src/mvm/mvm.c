@@ -90,7 +90,7 @@ int main(int argc, char** argv)
                 exit(1);
             }
             if (err != EXEPTION_SATE_OK) {
-                fprintf(stderr, "ERROR: Failed to execute program at '%s'! : %s\n", inst_as_cstr(mvm.program[mvm.ip].type), exeption_as_cstr(err));
+                fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(err));
                 exit(1);
             }
             if (limit > 0) {
