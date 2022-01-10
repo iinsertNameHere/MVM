@@ -96,7 +96,8 @@ loop: dup 1
 ```asm
 jmp main
 
-fnc: # Function
+# Function
+fnc:
     swap 1
     dbgPrint
     ret
