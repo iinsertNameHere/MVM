@@ -68,6 +68,7 @@ typedef enum {
     INST_DIVF,
     INST_JMP,
     INST_JMPIF,
+    INST_CALL,
     INST_RET,
     INST_EQ,
     INST_NOT,
@@ -253,6 +254,7 @@ const char* InstName(InstType instType)
         case INST_DIVF:        return "divf";
         case INST_JMP:         return "jmp";
         case INST_JMPIF:       return "jmpif";
+        case INST_CALL:        return "call";
         case INST_RET:         return "ret";
         case INST_EQ:          return "eq";
         case INST_NOT:         return "not";
@@ -283,6 +285,7 @@ int InstHasOperand(InstType instType)
         case INST_DIVF:        return 0;
         case INST_JMP:         return 1;
         case INST_JMPIF:       return 1;
+        case INST_CALL:        return 1;
         case INST_RET:         return 0;
         case INST_EQ:          return 0;
         case INST_NOT:         return 0;
@@ -338,7 +341,7 @@ ExeptionState mvm_execInst(MVM* mvm)
         }
 
         case INST_DUP: {
-            if (mvm->stack_size > MVM_STACK_CAPACITY) {
+            if (mvm->stack_size >= MVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
             if (mvm->stack_size - inst.operand.as_u64 <= 0) {
@@ -463,6 +466,15 @@ ExeptionState mvm_execInst(MVM* mvm)
                 mvm->ip += 1;
             }
             mvm->stack_size -= 1;
+            break;
+        }
+
+        case INST_CALL: {
+            if (mvm->stack_size >= MVM_STACK_CAPACITY) {
+                return EXEPTION_STACK_OVERFLOW;
+            }
+            mvm->stack[mvm->stack_size++].as_u64 = mvm->ip;
+            mvm->ip = inst.operand.as_u64;
             break;
         }
 
@@ -733,6 +745,19 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                         masm_pushDeferredOperand(masm, mvm->program_size, operand);
                         mvm->program[mvm->program_size++] = (Inst) {
                                 .type = INST_JMP
+                        };
+                    }
+                    
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_CALL)))) {
+                    if (operand.count > 0 && isdigit(*operand.data)) {
+                        mvm->program[mvm->program_size++] = (Inst) {
+                                .type = INST_CALL,
+                                .operand = { .as_i64 = sv_as_int(operand)}
+                        };
+                    } else {
+                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
+                        mvm->program[mvm->program_size++] = (Inst) {
+                                .type = INST_CALL
                         };
                     }
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMPIF)))) {
