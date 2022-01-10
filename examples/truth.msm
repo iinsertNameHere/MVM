@@ -1,0 +1,8 @@
+push 1 # Truth value
+truth:
+    dup 0
+    dup 0
+    dbgPrint
+    jmpif truth
+drop
+hlt
