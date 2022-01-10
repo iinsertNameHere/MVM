@@ -58,6 +58,7 @@ typedef enum {
     INST_PUSH,
     INST_DUP,
     INST_SWAP,
+    INST_DROP,
     INST_PLUSI,
     INST_MINUSI,
     INST_MULTI,
@@ -244,6 +245,7 @@ const char* InstName(InstType instType)
         case INST_PUSH:        return "push";
         case INST_DUP:         return "dup";
         case INST_SWAP:        return "swap";
+        case INST_DROP:        return "drop";
         case INST_PLUSI:       return "plusi";
         case INST_MINUSI:      return "minusi";
         case INST_MULTI:       return "multi";
@@ -275,6 +277,7 @@ int InstHasOperand(InstType instType)
         case INST_PUSH:        return 1;
         case INST_DUP:         return 1;
         case INST_SWAP:        return 1;
+        case INST_DROP:        return 0;
         case INST_PLUSI:       return 0;
         case INST_MINUSI:      return 0;
         case INST_MULTI:       return 0;
@@ -363,6 +366,15 @@ ExeptionState mvm_execInst(MVM* mvm)
             Word tmp = mvm->stack[a];
             mvm->stack[a] = mvm->stack[b];
             mvm->stack[b] = tmp;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_DROP: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
         }
@@ -473,7 +485,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size >= MVM_STACK_CAPACITY) {
                 return EXEPTION_STACK_OVERFLOW;
             }
-            mvm->stack[mvm->stack_size++].as_u64 = mvm->ip;
+            mvm->stack[mvm->stack_size++].as_u64 = mvm->ip + 1;
             mvm->ip = inst.operand.as_u64;
             break;
         }
@@ -529,7 +541,7 @@ ExeptionState mvm_execInst(MVM* mvm)
                     mvm->stack[mvm->stack_size - 1].as_u64,
                     mvm->stack[mvm->stack_size - 1].as_i64,
                     mvm->stack[mvm->stack_size - 1].as_f64);
-            if ((uintptr_t)mvm->stack[mvm->stack_size].as_ptr > 0) {
+            if ((uintptr_t)mvm->stack[mvm->stack_size - 1].as_ptr > 0) {
                 printf(" | ptr: 0x%llx\n", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
             } else {
                 printf(" | ptr: (nil)\n");
@@ -678,6 +690,10 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                             .type = INST_SWAP,
                             .operand = { .as_i64 = sv_as_int(operand)}
                     };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DROP)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_DROP,
+                    };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSI)))) {
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_PLUSI
@@ -747,7 +763,7 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                                 .type = INST_JMP
                         };
                     }
-                    
+
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_CALL)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         mvm->program[mvm->program_size++] = (Inst) {
