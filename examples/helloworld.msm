@@ -1,0 +1,27 @@
+push 0
+push 13     # \n
+push 33     # !
+push 100    # d
+push 108    # l
+push 114    # r
+push 111    # o
+push 87     # W
+push 32     # SPACE
+push 111    # o
+push 108    # l
+push 108    # l
+push 101    # e
+push 72     # H
+
+printLoop:
+    push 1
+    dup 1
+    gei
+    jmpif nextStep # If not 0 print char
+    jmp end # Else jmp to end
+    nextStep:
+    printc
+    jmp printLoop
+
+end:
+    hlt
