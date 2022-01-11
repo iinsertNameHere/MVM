@@ -97,13 +97,16 @@ loop: dup 1
 jmp main
 
 # Function
-fnc:
+add:
+    swap 2
+    plusf
     swap 1
-    dbgPrint
     ret
 
 main:
     push 10
-    call fnc # Calls the functions that Prints '10'
+    push 5
+    call add # Calls the functions
+    dbgPrint # Prints the result
     hlt
 ```
