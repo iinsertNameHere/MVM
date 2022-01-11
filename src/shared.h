@@ -74,11 +74,15 @@ typedef enum {
     INST_EQ,
     INST_NOT,
     INST_GEF,
+    INST_GEI,
     INST_HALT,
-    INST_DBGPRINT
+    INST_DBGPRINT,
+    INST_PRINTC,
 } InstType;
 
 const char* InstName(InstType instType);
+
+const char* inst_as_cstr(InstType instType);
 
 int InstHasOperand(InstType instType);
 
@@ -261,8 +265,10 @@ const char* InstName(InstType instType)
         case INST_EQ:          return "eq";
         case INST_NOT:         return "not";
         case INST_GEF:         return "gef";
+        case INST_GEI:         return "gei";
         case INST_HALT:        return "hlt";
-        case INST_DBGPRINT: return "dbgPrint";
+        case INST_DBGPRINT:    return "dbgPrint";
+        case INST_PRINTC:      return "printc";
         default:
             assert(0 && "InstName: Unreachable");
     }
@@ -293,13 +299,49 @@ int InstHasOperand(InstType instType)
         case INST_EQ:          return 0;
         case INST_NOT:         return 0;
         case INST_GEF:         return 0;
+        case INST_GEI:         return 0;
         case INST_HALT:        return 0;
-        case INST_DBGPRINT: return 0;
+        case INST_DBGPRINT:    return 0;
+        case INST_PRINTC:      return 0;
         default:
             assert(0 && "InstHasOperand: Unreachable");
     }
     assert(0 && "InstHasOperand: Unreachable");
     return 0;
+}
+
+const char* inst_as_cstr(InstType instType)
+{
+    switch (instType) {
+        case INST_NOP:         return "INST_NOP";
+        case INST_PUSH:        return "INST_PUSH";
+        case INST_DUP:         return "INST_DUP";
+        case INST_SWAP:        return "INST_SWAP";
+        case INST_DROP:        return "INST_DROP";
+        case INST_PLUSI:       return "INST_PLUSI";
+        case INST_MINUSI:      return "INST_MINUSI";
+        case INST_MULTI:       return "INST_MULTI";
+        case INST_DIVI:        return "INST_DIVI";
+        case INST_PLUSF:       return "INST_PLUSF";
+        case INST_MINUSF:      return "INST_MINUSF";
+        case INST_MULTF:       return "INST_MULTF";
+        case INST_DIVF:        return "INST_DIVF";
+        case INST_JMP:         return "INST_JMP";
+        case INST_JMPIF:       return "INST_JMPIF";
+        case INST_CALL:        return "INST_CALL";
+        case INST_RET:         return "INST_RET";
+        case INST_EQ:          return "INST_EQ";
+        case INST_NOT:         return "INST_NOT";
+        case INST_GEF:         return "INST_GEF";
+        case INST_GEI:         return "INST_GEI";
+        case INST_HALT:        return "INST_HALT";
+        case INST_DBGPRINT:    return "INST_DBGPRINT";
+        case INST_PRINTC:      return "INST_PRINTC";
+        default:
+            assert(0 && "InstHasOperand: Unreachable");
+    }
+    assert(0 && "InstHasOperand: Unreachable");
+    return "";
 }
 
 //////////// MVM Definitions ////////////
@@ -533,6 +575,16 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
+        case INST_GEI: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_u64 = (mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
         case INST_DBGPRINT: {
             if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
@@ -545,6 +597,20 @@ ExeptionState mvm_execInst(MVM* mvm)
                 printf(" | ptr: 0x%llx\n", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
             } else {
                 printf(" | ptr: (nil)\n");
+            }
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_PRINTC: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
+                printf("%c", (int) mvm->stack[mvm->stack_size - 1].as_u64);
+            } else {
+                printf("\n");
             }
             mvm->stack_size -= 1;
             mvm->ip += 1;
@@ -742,9 +808,17 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_GEF
                     };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_GEI)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_GEI
+                    };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DBGPRINT)))) {
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_DBGPRINT
+                    };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PRINTC)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_PRINTC
                     };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_RET)))) {
                     mvm->program[mvm->program_size++] = (Inst) {

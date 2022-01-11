@@ -97,7 +97,7 @@ int main(int argc, char** argv)
                 --limit;
             }
             mvm_dumpStack(stdout, &mvm);
-            printf("\nDEBUG: Executed Step: [%d]", step);
+            printf("\nDEBUG: Executed '%s' | Step: [%d]", inst_as_cstr(mvm.program[mvm.ip-1].type), step);
             getchar();
             printf("\n");
         }
