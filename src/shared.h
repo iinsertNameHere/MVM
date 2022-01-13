@@ -119,8 +119,13 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 //////////// MVM Definitions ////////////
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
 #define MVM_PROGRAM_CAPACITY 1024
+#define MVM_NATIVES_CAPACITY 1024
 
-typedef struct {
+typedef struct MVM MVM;
+
+typedef ExeptionState (*MvmNative)(MVM*);
+
+typedef struct MVM {
     Word stack[MVM_STACK_CAPACITY];
     uint64_t stack_size;
 
@@ -128,16 +133,22 @@ typedef struct {
     uint64_t program_size;
     InstAddr ip;
 
+    MvmNative natives[MVM_NATIVES_CAPACITY];
+    size_t natives_size;
+
     int halt;
-} MVM;
+};
 
 ExeptionState mvm_execInst(MVM* mvm);
+void mvm_pushNative(MVM* mvm, MvmNative);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 Word numberLiteral_as_Word (StringView sv);
 void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
+
+ExeptionState native_alloc(MVM* mvm);
 
 //////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path);
@@ -362,6 +373,8 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
     }
     return EXEPTION_SATE_OK;
 }
+
+
 
 ExeptionState mvm_execInst(MVM* mvm)
 {
@@ -610,7 +623,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
                 printf("%c", (int) mvm->stack[mvm->stack_size - 1].as_u64);
             } else {
-                printf("\n");
+                printf("\n");+
             }
             mvm->stack_size -= 1;
             mvm->ip += 1;
@@ -875,6 +888,23 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
         InstAddr addr = masm_findLabelAddr(masm, masm->deferredOperands[i].label);
         mvm->program[masm->deferredOperands[i].addr].operand.as_u64 = addr;
     }
+}
+
+void mvm_pushNative(MVM* mvm, MvmNative native)
+{
+    assert(mvm->natives_size < MVM_NATIVES_CAPACITY);
+    mvm->natives[mvm->natives_size++] = native;
+}
+
+ExeptionState native_alloc(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
+
+    return EXEPTION_SATE_OK;
 }
 
 //////////// Label Definitions ////////////
