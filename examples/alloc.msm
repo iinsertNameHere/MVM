@@ -1,0 +1,6 @@
+jmp main
+main:
+    push 420
+    ncall 0
+    ncall 1
+    hlt
