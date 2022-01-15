@@ -71,6 +71,9 @@ int main(int argc, char** argv)
         exit(1);
     }
 
+    mvm_pushNative(&mvm, native_alloc);
+    mvm_pushNative(&mvm, native_free);
+
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {
         ExeptionState state = mvm_execProgram(&mvm, limit);
@@ -83,8 +86,16 @@ int main(int argc, char** argv)
     } else {
         int step = 0;
         while (limit != 0 && !mvm.halt) {
-            ExeptionState err = mvm_execInst(&mvm);
             step++;
+            if (InstHasOperand(mvm.program[mvm.ip].type)) {
+                printf("\n[DEBUG] Executing '%s %" PRIu64 "' | Step [%d] |:\n",
+                       InstName(mvm.program[mvm.ip].type),
+                       mvm.program[mvm.ip].operand.as_u64, step);
+            } else {
+                printf("\n[DEBUG] Executing '%s' | Step [%d] |:\n",
+                           InstName(mvm.program[mvm.ip].type), step);
+            }
+            ExeptionState err = mvm_execInst(&mvm);
             if (mvm.stack_size > MVM_STACK_CAPACITY) {
                 fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(EXEPTION_STACK_OVERFLOW));
                 exit(1);
@@ -97,9 +108,8 @@ int main(int argc, char** argv)
                 --limit;
             }
             mvm_dumpStack(stdout, &mvm);
-            printf("\nDEBUG: Executed '%s' | Step: [%d]", inst_as_cstr(mvm.program[mvm.ip-1].type), step);
+            printf("\nPress enter to execute the next instruction...\n");
             getchar();
-            printf("\n");
         }
     }
     return 0;

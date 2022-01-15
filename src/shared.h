@@ -11,6 +11,7 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 //////////// Data Definitions ////////////
 #define ARRAY_SIZE(xs) (sizeof(xs) / sizeof((xs)[0]))
@@ -70,6 +71,7 @@ typedef enum {
     INST_JMP,
     INST_JMPIF,
     INST_CALL,
+    INST_NATIVECALL,
     INST_RET,
     INST_EQ,
     INST_NOT,
@@ -81,8 +83,6 @@ typedef enum {
 } InstType;
 
 const char* InstName(InstType instType);
-
-const char* inst_as_cstr(InstType instType);
 
 int InstHasOperand(InstType instType);
 
@@ -125,7 +125,7 @@ typedef struct MVM MVM;
 
 typedef ExeptionState (*MvmNative)(MVM*);
 
-typedef struct MVM {
+struct MVM {
     Word stack[MVM_STACK_CAPACITY];
     uint64_t stack_size;
 
@@ -149,6 +149,7 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 ExeptionState native_alloc(MVM* mvm);
+ExeptionState native_free(MVM* mvm);
 
 //////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path);
@@ -272,6 +273,7 @@ const char* InstName(InstType instType)
         case INST_JMP:         return "jmp";
         case INST_JMPIF:       return "jmpif";
         case INST_CALL:        return "call";
+        case INST_NATIVECALL:  return "ncall";
         case INST_RET:         return "ret";
         case INST_EQ:          return "eq";
         case INST_NOT:         return "not";
@@ -306,6 +308,7 @@ int InstHasOperand(InstType instType)
         case INST_JMP:         return 1;
         case INST_JMPIF:       return 1;
         case INST_CALL:        return 1;
+        case INST_NATIVECALL:  return 1;
         case INST_RET:         return 0;
         case INST_EQ:          return 0;
         case INST_NOT:         return 0;
@@ -321,40 +324,6 @@ int InstHasOperand(InstType instType)
     return 0;
 }
 
-const char* inst_as_cstr(InstType instType)
-{
-    switch (instType) {
-        case INST_NOP:         return "INST_NOP";
-        case INST_PUSH:        return "INST_PUSH";
-        case INST_DUP:         return "INST_DUP";
-        case INST_SWAP:        return "INST_SWAP";
-        case INST_DROP:        return "INST_DROP";
-        case INST_PLUSI:       return "INST_PLUSI";
-        case INST_MINUSI:      return "INST_MINUSI";
-        case INST_MULTI:       return "INST_MULTI";
-        case INST_DIVI:        return "INST_DIVI";
-        case INST_PLUSF:       return "INST_PLUSF";
-        case INST_MINUSF:      return "INST_MINUSF";
-        case INST_MULTF:       return "INST_MULTF";
-        case INST_DIVF:        return "INST_DIVF";
-        case INST_JMP:         return "INST_JMP";
-        case INST_JMPIF:       return "INST_JMPIF";
-        case INST_CALL:        return "INST_CALL";
-        case INST_RET:         return "INST_RET";
-        case INST_EQ:          return "INST_EQ";
-        case INST_NOT:         return "INST_NOT";
-        case INST_GEF:         return "INST_GEF";
-        case INST_GEI:         return "INST_GEI";
-        case INST_HALT:        return "INST_HALT";
-        case INST_DBGPRINT:    return "INST_DBGPRINT";
-        case INST_PRINTC:      return "INST_PRINTC";
-        default:
-            assert(0 && "InstHasOperand: Unreachable");
-    }
-    assert(0 && "InstHasOperand: Unreachable");
-    return "";
-}
-
 //////////// MVM Definitions ////////////
 ExeptionState mvm_execProgram(MVM* mvm, int limit)
 {
@@ -363,7 +332,6 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
         if (mvm->stack_size > MVM_STACK_CAPACITY) {
             return EXEPTION_STACK_OVERFLOW;
         }
-        //mvm_dumpStack(stdout, mvm);
         if (err != EXEPTION_SATE_OK) {
             return err;
         }
@@ -545,6 +513,15 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
+        case INST_NATIVECALL: {
+            if (inst.operand.as_u64 > mvm->natives_size) {
+                return EXEPTION_ILLEGAL_OPERAND;
+            }
+            mvm->natives[inst.operand.as_u64](mvm);
+            mvm->ip += 1;
+            break;
+        }
+
         case INST_RET: {
             if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
@@ -623,7 +600,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
                 printf("%c", (int) mvm->stack[mvm->stack_size - 1].as_u64);
             } else {
-                printf("\n");+
+                printf("\n");
             }
             mvm->stack_size -= 1;
             mvm->ip += 1;
@@ -837,6 +814,11 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_RET
                     };
+                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_NATIVECALL)))) {
+                    mvm->program[mvm->program_size++] = (Inst) {
+                            .type = INST_NATIVECALL,
+                            .operand = { .as_i64 = sv_as_int(operand)}
+                    };
 
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
@@ -850,7 +832,6 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                                 .type = INST_JMP
                         };
                     }
-
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_CALL)))) {
                     if (operand.count > 0 && isdigit(*operand.data)) {
                         mvm->program[mvm->program_size++] = (Inst) {
@@ -903,8 +884,17 @@ ExeptionState native_alloc(MVM* mvm)
     }
 
     mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
-
     return EXEPTION_SATE_OK;
+}
+ExeptionState native_free(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    free(mvm->stack[mvm->stack_size - 1].as_ptr);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
 }
 
 //////////// Label Definitions ////////////
