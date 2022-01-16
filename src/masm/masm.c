@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 
     StringView source_code = slurp_file(inputFilePath);
 
-    mvm_translateSource(source_code, &mvm, &masm);
+    mvm_translateSource(source_code, inputFilePath, &mvm, &masm);
     mvm_saveProgramToFile(&mvm, outputFilePath);
 
     return  0;

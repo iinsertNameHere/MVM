@@ -2,8 +2,8 @@
 
 jmp main
 
-#define SPACE 32
-#define NL 13
+%define SPACE 32
+%define NL 13
 
 main:
     push 0

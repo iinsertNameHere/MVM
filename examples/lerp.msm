@@ -3,7 +3,7 @@
 jmp main
 
 ; Iterations
-#define I 10.0
+%define I 10.0
 
 lerp_f64:
     dup 3

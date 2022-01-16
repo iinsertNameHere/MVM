@@ -3,10 +3,10 @@
 jmp main
 
 ; Truth value
-#define TRUTH_VAL 1
+%define T 1
 
 main:
-    push TRUTH_VAL
+    push T
 truth:
     dup 0
     push 1

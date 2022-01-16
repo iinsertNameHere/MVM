@@ -120,6 +120,8 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
+#define COMMENT_SYMBOL ';'
+#define PP_SYMBOL '%'
 
 typedef struct MVM MVM;
 
@@ -145,7 +147,7 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 int numberLiteral_as_Word (StringView sv, Word* out);
-void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
+void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 ////////////////////////////////////////////
@@ -694,42 +696,78 @@ int numberLiteral_as_Word (StringView sv, Word* out)
     return 1;
 }
 
-void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
+void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Masm* masm)
 {
-    const char commentChar = ';';
     mvm->program_size = 0;
 
     // Pass one
+    int lineNum = 0;
     while (source.count > 0) {
         assert(mvm->program_size < MVM_PROGRAM_CAPACITY);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
-        if (line.count > 0 && *line.data != commentChar) {
+        lineNum += 1;
+        if (line.count > 0 && *line.data != COMMENT_SYMBOL) {
             StringView  token = sv_chopByDelim(&line, ' ');
 
-            if (token.count > 0 && token.data[token.count - 1] == ':') {
-                StringView label = (StringView) { .count = token.count - 1, .data = token.data };
-                masm_pushLabel(masm, label, mvm->program_size);
-                token = sv_trim(sv_chopByDelim(&line, ' '));
-            }
+            // Preprocessor
+            if (token.count > 0 && *token.data == PP_SYMBOL) {
+                token.count -= 1;
+                token.data += 1;
+                if (sv_eq(token, cstr_as_sv("define"))) {
+                    line = sv_trim(line);
+                    StringView label = sv_chopByDelim(&line, ' ');
 
-            if (token.count > 0) {
-                StringView operand = sv_trim(sv_chopByDelim(&line, commentChar));
-                InstType instType = INST_NOP;
-
-                if (GetInstName(token, &instType)) {
-                    mvm->program[mvm->program_size].type = instType;
-                    if (InstHasOperand(instType)) {
-                        if (!numberLiteral_as_Word(
-                                operand,
-                                &mvm->program[mvm->program_size].operand)) {
-                            masm_pushDeferredOperand(masm, mvm->program_size, operand);
+                    if (label.count > 0) {
+                        line = sv_trim(line);
+                        StringView value = sv_chopByDelim(&line, ' ');
+                        Word word = {0};
+                        if (!numberLiteral_as_Word(value, &word)) {
+                            fprintf(stderr, "%s:%d: ERORR: '%.*s' is not a number!\n", inputFile, lineNum, (int) value.count, value.data);
+                            exit(1);
                         }
-
+                        masm_pushLabel(masm, label, word.as_u64);
+                    } else {
+                        fprintf(stderr, "%s:%d: ERORR: Definition name expected!\n", inputFile, lineNum);
+                        exit(1);
                     }
-                    mvm->program_size += 1;
                 } else {
-                    fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int) token.count, token.data);
+                    fprintf(stderr, "%s:%d: ERORR: Unknown preprocessor directive '%.*s'!\n", inputFile, lineNum, (int) token.count, token.data);
                     exit(1);
+                }
+            } else {
+
+                if (token.count > 0 && token.data[token.count - 1] == ':') {
+                    StringView label = (StringView) {.count = token.count - 1, .data = token.data};
+                    masm_pushLabel(masm, label, mvm->program_size);
+                    token = sv_trim(sv_chopByDelim(&line, ' '));
+                }
+
+                if (token.count > 0) {
+                    StringView operand = sv_trim(sv_chopByDelim(&line, COMMENT_SYMBOL));
+                    InstType instType = INST_NOP;
+
+                    if (GetInstName(token, &instType)) {
+                        mvm->program[mvm->program_size].type = instType;
+                        if (InstHasOperand(instType)) {
+                            if (operand.count == 0) {
+                                fprintf(stderr, "%s:%d: ERORR: instruction '%.*s' expects an operand!\n", inputFile,
+                                        lineNum, (int) token.count, token.data);
+                                exit(1);
+                            }
+
+                            if (!numberLiteral_as_Word(
+                                    operand,
+                                    &mvm->program[mvm->program_size].operand)) {
+                                masm_pushDeferredOperand(masm, mvm->program_size, operand);
+                            }
+
+                        }
+                        mvm->program_size += 1;
+                    } else {
+                        fprintf(stderr, "%s:%d: ERORR: Unknown instruction '%.*s'!\n", inputFile, lineNum,
+                                (int) token.count, token.data);
+                        exit(1);
+                    }
                 }
             }
         }

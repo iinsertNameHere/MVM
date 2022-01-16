@@ -8,10 +8,10 @@
 #include "stdlib.mlb"
 
 ; counter
-#define C 750000
+%define C 750000
 
 ; cleanup subnum
-#define S 0.000001
+%define S 0.000001
 
 push 4.0        ; acc (result of first division 4/1)
 push 3.0        ; denominator

@@ -3,7 +3,7 @@
 jmp main
 
 ; Iterations:
-#define I 30
+%define I 30
 
 ; Main Loop
 main:
