@@ -1,8 +1,29 @@
 # Fibonacci numbers
 push 0
 push 1
-# Label definition
-loop: dup 1
+jmp main_loop
+
+print_u64_ln:
+    swap 1
+    ncall 4
+    push 13 # New line ASCII code
+    ncall 2 # Print Char
+    ret
+
+# Main Loop
+main_loop: dup 1
+      # Calc fib number
       dup 1
       plusi
-      jmp loop   # Jump to 'loop' label
+      dup 0
+      dup 0
+
+      # Print fib number
+      call print_u64_ln
+
+      # Only jmp if fib number is not 1597
+      push 1597
+      eq
+      not
+      jmpif main_loop   # Jump to 'main_loop' label
+hlt

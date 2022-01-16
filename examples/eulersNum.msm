@@ -23,5 +23,5 @@ loop:
     gef
 
     jmpif loop
-dbgPrint
+ncall 3
 hlt

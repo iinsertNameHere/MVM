@@ -20,7 +20,7 @@ printLoop:
     jmpif nextStep # If not 0 print char
     jmp end # Else jmp to end
     nextStep:
-    printc
+    ncall 2
     jmp printLoop
 
 end:

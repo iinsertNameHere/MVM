@@ -1,8 +1,9 @@
-push 1 # Truth value
+push 0 # Truth value
 truth:
     dup 0
-    dup 0
-    dbgPrint
+    push 1
+    eq
+    dup 1
+    ncall 4
     jmpif truth
-drop
 hlt
