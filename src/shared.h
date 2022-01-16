@@ -78,10 +78,12 @@ typedef enum {
     INST_GEF,
     INST_GEI,
     INST_HALT,
+
+    NUMBER_OF_INSTS
 } InstType;
 
 const char* InstName(InstType instType);
-
+int GetInstName(StringView name, InstType* out);
 int InstHasOperand(InstType instType);
 
 typedef struct {
@@ -142,7 +144,7 @@ void mvm_pushNative(MVM* mvm, MvmNative);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
-Word numberLiteral_as_Word (StringView sv);
+int numberLiteral_as_Word (StringView sv, Word* out);
 void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
@@ -286,11 +288,23 @@ const char* InstName(InstType instType)
         case INST_GEF:         return "gef";
         case INST_GEI:         return "gei";
         case INST_HALT:        return "hlt";
+        case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstName: Unreachable");
     }
     assert(0 && "InstName: Unreachable");
     return "";
+}
+
+int GetInstName(StringView name, InstType* out)
+{
+    for (InstType type = (InstType)0; type < NUMBER_OF_INSTS; type += 1) {
+        if (sv_eq(cstr_as_sv(InstName(type)), name)) {
+            *out = type;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int InstHasOperand(InstType instType)
@@ -319,6 +333,7 @@ int InstHasOperand(InstType instType)
         case INST_GEF:         return 0;
         case INST_GEI:         return 0;
         case INST_HALT:        return 0;
+        case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstHasOperand: Unreachable");
     }
@@ -577,6 +592,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
+        case NUMBER_OF_INSTS:
         default:
             return EXEPTION_ILLEGAL_INST;
     }
@@ -657,7 +673,7 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
     fclose(f);
 }
 
-Word numberLiteral_as_Word (StringView sv)
+int numberLiteral_as_Word (StringView sv, Word* out)
 {
     assert(sv.count < 1024);
     char cstr[sv.count + 1];
@@ -671,155 +687,48 @@ Word numberLiteral_as_Word (StringView sv)
     if ((size_t)(endptr - cstr) != sv.count) {
         result.as_f64 = strtod(cstr, &endptr);
         if ((size_t)(endptr - cstr) != sv.count) {
-            fprintf(stderr, "ERROR: '%s' is not a number literal!", cstr);
-            exit(1);
+            return 0;
         }
     }
-    return result;
+    *out = result;
+    return 1;
 }
 
 void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
 {
+    const char commentChar = ';';
     mvm->program_size = 0;
 
     // Pass one
     while (source.count > 0) {
         assert(mvm->program_size < MVM_PROGRAM_CAPACITY);
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
-        if (line.count > 0 && *line.data != '#') {
-            StringView  instName = sv_chopByDelim(&line, ' ');
+        if (line.count > 0 && *line.data != commentChar) {
+            StringView  token = sv_chopByDelim(&line, ' ');
 
-            if (instName.count > 0 && instName.data[instName.count - 1] == ':') {
-                StringView label = (StringView) { .count = instName.count - 1, .data = instName.data };
+            if (token.count > 0 && token.data[token.count - 1] == ':') {
+                StringView label = (StringView) { .count = token.count - 1, .data = token.data };
                 masm_pushLabel(masm, label, mvm->program_size);
-                instName = sv_trim(sv_chopByDelim(&line, ' '));
+                token = sv_trim(sv_chopByDelim(&line, ' '));
             }
 
-            if (instName.count > 0) {
-                StringView operand = sv_trim(sv_chopByDelim(&line, '#'));
-                if (sv_eq(instName, cstr_as_sv(InstName(INST_NOP)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_NOP
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PUSH)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_PUSH,
-                            .operand = numberLiteral_as_Word(operand)
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DUP)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_DUP,
-                            .operand = { .as_i64 = sv_as_int(operand)}
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_SWAP)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_SWAP,
-                            .operand = { .as_i64 = sv_as_int(operand)}
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DROP)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_DROP,
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSI)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_PLUSI
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSI)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_MINUSI
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTI)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_MULTI
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVI)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_DIVI
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PLUSF)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_PLUSF
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MINUSF)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_MINUSF
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_MULTF)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_MULTF
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DIVF)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_DIVF
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_HALT)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_HALT
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_EQ)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_EQ
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_NOT)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_NOT
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_GEF)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_GEF
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_GEI)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_GEI
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_RET)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_RET
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_NATIVECALL)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_NATIVECALL,
-                            .operand = { .as_i64 = sv_as_int(operand)}
-                    };
+            if (token.count > 0) {
+                StringView operand = sv_trim(sv_chopByDelim(&line, commentChar));
+                InstType instType = INST_NOP;
 
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMP)))) {
-                    if (operand.count > 0 && isdigit(*operand.data)) {
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMP,
-                                .operand = { .as_i64 = sv_as_int(operand)}
-                        };
-                    } else {
-                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMP
-                        };
+                if (GetInstName(token, &instType)) {
+                    mvm->program[mvm->program_size].type = instType;
+                    if (InstHasOperand(instType)) {
+                        if (!numberLiteral_as_Word(
+                                operand,
+                                &mvm->program[mvm->program_size].operand)) {
+                            masm_pushDeferredOperand(masm, mvm->program_size, operand);
+                        }
+
                     }
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_CALL)))) {
-                    if (operand.count > 0 && isdigit(*operand.data)) {
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_CALL,
-                                .operand = { .as_i64 = sv_as_int(operand)}
-                        };
-                    } else {
-                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_CALL
-                        };
-                    }
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_JMPIF)))) {
-                    if (operand.count > 0 && isdigit(*operand.data)) {
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMPIF,
-                                .operand = { .as_i64 = sv_as_int(operand)}
-                        };
-                    } else {
-                        masm_pushDeferredOperand(masm, mvm->program_size, operand);
-                        mvm->program[mvm->program_size++] = (Inst) {
-                                .type = INST_JMPIF
-                        };
-                    }
+                    mvm->program_size += 1;
                 } else {
-                    fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int) instName.count, instName.data);
+                    fprintf(stderr, "ERORR: Unknown instruction '%.*s'!\n", (int) token.count, token.data);
                     exit(1);
                 }
             }
