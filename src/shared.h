@@ -97,7 +97,7 @@ typedef struct {
 
 typedef struct {
     StringView name;
-    InstAddr addr;
+    Word word;
 } Label;
 
 typedef struct {
@@ -112,8 +112,8 @@ typedef struct {
     size_t deferredOperands_size;
 } Masm;
 
-InstAddr masm_findLabelAddr(const Masm* masm, StringView name);
-void masm_pushLabel(Masm* masm, StringView name, InstAddr addr);
+int masm_resolveLabel(const Masm* masm, StringView name, Word* out);
+int masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 
 //////////// MVM Definitions ////////////
@@ -725,7 +725,11 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
                             fprintf(stderr, "%s:%d: ERORR: '%.*s' is not a number!\n", inputFile, lineNum, (int) value.count, value.data);
                             exit(1);
                         }
-                        masm_pushLabel(masm, label, word.as_u64);
+
+                        if (!masm_bindLabel(masm, label, word)) {
+                            fprintf(stderr, "%s:%d: ERORR: '%.*s' is already defined!!\n", inputFile, lineNum, (int) label.count, label.data);
+                            exit(1);
+                        }
                     } else {
                         fprintf(stderr, "%s:%d: ERORR: Definition name expected!\n", inputFile, lineNum);
                         exit(1);
@@ -738,7 +742,10 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
 
                 if (token.count > 0 && token.data[token.count - 1] == ':') {
                     StringView label = (StringView) {.count = token.count - 1, .data = token.data};
-                    masm_pushLabel(masm, label, mvm->program_size);
+                    if (!masm_bindLabel(masm, label, (Word) { .as_u64 = mvm->program_size })) {
+                        fprintf(stderr, "%s:%d: ERORR: '%.*s' is already defined!\n", inputFile, lineNum, (int) label.count, label.data);
+                        exit(1);
+                    }
                     token = sv_trim(sv_chopByDelim(&line, ' '));
                 }
 
@@ -775,8 +782,12 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
 
     // Pass two
     for (size_t i = 0; i < masm->deferredOperands_size; ++i) {
-        InstAddr addr = masm_findLabelAddr(masm, masm->deferredOperands[i].label);
-        mvm->program[masm->deferredOperands[i].addr].operand.as_u64 = addr;
+        StringView label = masm->deferredOperands[i].label;
+        Word* operand = &mvm->program[masm->deferredOperands[i].addr].operand;
+        if (!masm_resolveLabel(masm, label, operand)) {
+            fprintf(stderr, "%s:%d: ERORR: '%.*s' is not defined!\n", inputFile, lineNum, (int) label.count, label.data);
+            exit(1);
+        }
     }
 }
 
@@ -875,23 +886,26 @@ ExeptionState native_print_ptr(MVM* mvm)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////// Label Definitions ////////////
-InstAddr masm_findLabelAddr(const Masm* masm, StringView name)
+int masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 {
     for (size_t i = 0; i < masm->lables_size; ++i) {
         if (sv_eq(masm->labels[i].name, name)) {
-            return masm->labels[i].addr;
+            *out = masm->labels[i].word;
+            return 1;
         }
     }
-    fprintf(stderr, "ERROR: Label '%.*s' does not exist!\n",
-            (int)name.count, name.data);
-    exit(1);
-    return -1;
+    return 0;
 }
 
-void masm_pushLabel(Masm* masm, StringView name, InstAddr addr)
+int masm_bindLabel(Masm* masm, StringView name, Word word)
 {
     assert(masm->lables_size < LABEL_CAPACITY);
-    masm->labels[masm->lables_size++] = (Label) { .name = name, .addr = addr };
+    Word ignore =  {0};
+    if (!masm_resolveLabel(masm, name, &ignore)) {
+        masm->labels[masm->lables_size++] = (Label) {.name = name, .word = word};
+        return 1;
+    }
+    return 0;
 }
 
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
