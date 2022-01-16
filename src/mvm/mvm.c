@@ -73,6 +73,9 @@ int main(int argc, char** argv)
 
     mvm_pushNative(&mvm, native_alloc);
     mvm_pushNative(&mvm, native_free);
+    mvm_pushNative(&mvm, native_printChar);
+    mvm_pushNative(&mvm, native_printFloat);
+    mvm_pushNative(&mvm, native_printUint);
 
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {

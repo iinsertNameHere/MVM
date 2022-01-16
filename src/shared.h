@@ -78,8 +78,6 @@ typedef enum {
     INST_GEF,
     INST_GEI,
     INST_HALT,
-    INST_DBGPRINT,
-    INST_PRINTC,
 } InstType;
 
 const char* InstName(InstType instType);
@@ -148,8 +146,14 @@ Word numberLiteral_as_Word (StringView sv);
 void mvm_translateSource(StringView source, MVM* mvm, Masm* masm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
+////////////////////////////////////////////
 ExeptionState native_alloc(MVM* mvm);
-ExeptionState native_free(MVM* mvm);
+ExeptionState native_free (MVM* mvm);
+ExeptionState native_printChar (MVM* mvm);
+ExeptionState native_printFloat (MVM* mvm);
+ExeptionState native_printUint(MVM* mvm);
+////////////////////////////////////////////
+
 
 //////////// Util Definitions ////////////
 StringView slurp_file(const char* file_path);
@@ -280,8 +284,6 @@ const char* InstName(InstType instType)
         case INST_GEF:         return "gef";
         case INST_GEI:         return "gei";
         case INST_HALT:        return "hlt";
-        case INST_DBGPRINT:    return "dbgPrint";
-        case INST_PRINTC:      return "printc";
         default:
             assert(0 && "InstName: Unreachable");
     }
@@ -315,8 +317,6 @@ int InstHasOperand(InstType instType)
         case INST_GEF:         return 0;
         case INST_GEI:         return 0;
         case INST_HALT:        return 0;
-        case INST_DBGPRINT:    return 0;
-        case INST_PRINTC:      return 0;
         default:
             assert(0 && "InstHasOperand: Unreachable");
     }
@@ -575,38 +575,6 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
-        case INST_DBGPRINT: {
-            if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
-            }
-            printf("  u64: %llu | i64: %lld | f64: %lf",
-                    mvm->stack[mvm->stack_size - 1].as_u64,
-                    mvm->stack[mvm->stack_size - 1].as_i64,
-                    mvm->stack[mvm->stack_size - 1].as_f64);
-            if ((uintptr_t)mvm->stack[mvm->stack_size - 1].as_ptr > 0) {
-                printf(" | ptr: 0x%llx\n", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
-            } else {
-                printf(" | ptr: (nil)\n");
-            }
-            mvm->stack_size -= 1;
-            mvm->ip += 1;
-            break;
-        }
-
-        case INST_PRINTC: {
-            if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
-            }
-            if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
-                printf("%c", (int) mvm->stack[mvm->stack_size - 1].as_u64);
-            } else {
-                printf("\n");
-            }
-            mvm->stack_size -= 1;
-            mvm->ip += 1;
-            break;
-        }
-
         default:
             return EXEPTION_ILLEGAL_INST;
     }
@@ -802,14 +770,6 @@ void mvm_translateSource(StringView source, MVM* mvm, Masm* masm)
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_GEI
                     };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_DBGPRINT)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_DBGPRINT
-                    };
-                } else if (sv_eq(instName, cstr_as_sv(InstName(INST_PRINTC)))) {
-                    mvm->program[mvm->program_size++] = (Inst) {
-                            .type = INST_PRINTC
-                    };
                 } else if (sv_eq(instName, cstr_as_sv(InstName(INST_RET)))) {
                     mvm->program[mvm->program_size++] = (Inst) {
                             .type = INST_RET
@@ -877,6 +837,10 @@ void mvm_pushNative(MVM* mvm, MvmNative native)
     mvm->natives[mvm->natives_size++] = native;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
 ExeptionState native_alloc(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
@@ -886,6 +850,7 @@ ExeptionState native_alloc(MVM* mvm)
     mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
     return EXEPTION_SATE_OK;
 }
+
 ExeptionState native_free(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
@@ -896,6 +861,47 @@ ExeptionState native_free(MVM* mvm)
     mvm->stack_size -= 1;
     return  EXEPTION_SATE_OK;
 }
+
+ExeptionState native_printChar(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
+        printf("%c", (int) mvm->stack[mvm->stack_size - 1].as_u64);
+    } else {
+        printf("\n");
+    }
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+ExeptionState native_printFloat(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    printf("%lf", mvm->stack[mvm->stack_size - 1].as_f64);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+ExeptionState native_printUint(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    printf("%" PRIu64, mvm->stack[mvm->stack_size - 1].as_u64);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////// Label Definitions ////////////
 InstAddr masm_findLabelAddr(const Masm* masm, StringView name)
