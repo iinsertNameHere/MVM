@@ -1,6 +1,8 @@
 jmp main
 main:
     push 420
-    ncall 0
-    ncall 1
+    ncall 5
+    dup 0
+    ncall 4
+    ncall 6
     hlt

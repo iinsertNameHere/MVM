@@ -5,9 +5,9 @@ jmp main_loop
 
 print_u64_ln:
     swap 1
-    ncall 4
+    ncall 3
     push 13 # New line ASCII code
-    ncall 2 # Print Char
+    ncall 0 # Print Char
     ret
 
 # Main Loop

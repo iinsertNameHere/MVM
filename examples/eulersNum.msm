@@ -23,5 +23,5 @@ loop:
     gef
 
     jmpif loop
-ncall 3
+ncall 1
 hlt

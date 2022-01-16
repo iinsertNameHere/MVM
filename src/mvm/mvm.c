@@ -71,11 +71,13 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-    mvm_pushNative(&mvm, native_alloc);
-    mvm_pushNative(&mvm, native_free);
-    mvm_pushNative(&mvm, native_printChar);
-    mvm_pushNative(&mvm, native_printFloat);
-    mvm_pushNative(&mvm, native_printUint);
+    mvm_pushNative(&mvm, native_print_char); // 0
+    mvm_pushNative(&mvm, native_print_f64);  // 1
+    mvm_pushNative(&mvm, native_print_i64);  // 2
+    mvm_pushNative(&mvm, native_print_u64);  // 3
+    mvm_pushNative(&mvm, native_print_ptr);  // 4
+    mvm_pushNative(&mvm, native_alloc);      // 5
+    mvm_pushNative(&mvm, native_free);       // 6
 
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {

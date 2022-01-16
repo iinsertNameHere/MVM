@@ -1,9 +1,9 @@
-push 0 # Truth value
+push 1 # Truth value
 truth:
     dup 0
     push 1
     eq
     dup 1
-    ncall 4
+    ncall 3
     jmpif truth
 hlt

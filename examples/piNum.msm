@@ -53,5 +53,5 @@ drop
 push 0.000001
 minusf
 
-ncall 3 # print_f64
+ncall 1
 hlt

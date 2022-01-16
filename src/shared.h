@@ -149,9 +149,11 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit);
 ////////////////////////////////////////////
 ExeptionState native_alloc(MVM* mvm);
 ExeptionState native_free (MVM* mvm);
-ExeptionState native_printChar (MVM* mvm);
-ExeptionState native_printFloat (MVM* mvm);
-ExeptionState native_printUint(MVM* mvm);
+ExeptionState native_print_char (MVM* mvm);
+ExeptionState native_print_f64 (MVM* mvm);
+ExeptionState native_print_i64 (MVM* mvm);
+ExeptionState native_print_u64(MVM* mvm);
+ExeptionState native_print_ptr(MVM* mvm);
 ////////////////////////////////////////////
 
 
@@ -862,7 +864,7 @@ ExeptionState native_free(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_printChar(MVM* mvm)
+ExeptionState native_print_char(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -877,7 +879,7 @@ ExeptionState native_printChar(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_printFloat(MVM* mvm)
+ExeptionState native_print_f64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -888,13 +890,35 @@ ExeptionState native_printFloat(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_printUint(MVM* mvm)
+ExeptionState native_print_i64(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    printf("%" PRId64, mvm->stack[mvm->stack_size - 1].as_i64);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+ExeptionState native_print_u64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
     }
 
     printf("%" PRIu64, mvm->stack[mvm->stack_size - 1].as_u64);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+ExeptionState native_print_ptr(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    printf("0x%llx", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
     mvm->stack_size -= 1;
     return  EXEPTION_SATE_OK;
 }

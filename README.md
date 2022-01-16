@@ -109,7 +109,7 @@ main:
     push 10
     push 5
     call add # Calls the functions
-    dbgPrint # Prints the result
+    ncall 3 # Prints the result
     hlt
 ```
 
@@ -138,7 +138,7 @@ printLoop:
     jmpif nextStep # If not 0 print char
     jmp end # Else jmp to end
     nextStep:
-    ncall 2
+    ncall 0
     jmp printLoop
 
 end:

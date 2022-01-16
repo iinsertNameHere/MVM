@@ -1,6 +1,12 @@
 jmp main
 
-# a | b | t
+print_f64_ln:
+    swap 1
+    ncall 1
+    push 13 # New line ASCII code
+    ncall 0 # Print Char
+    ret
+
 lerpf:
     dup 3
     dup 3
@@ -9,8 +15,7 @@ lerpf:
     dup 3
     multf
     plusf
-# cleanup:
-    swap 2
+    swap 2  # cleanup phase
     drop
     swap 2
     drop
@@ -23,14 +28,17 @@ main:
     push 420.0
     push 0.0
     call lerpf
+    call print_f64_ln
 
     push 69.0
     push 420.0
     push 1.0
     call lerpf
+    call print_f64_ln
 
     push 69.0
     push 420.0
     push 0.5
     call lerpf
+    call print_f64_ln
 hlt
