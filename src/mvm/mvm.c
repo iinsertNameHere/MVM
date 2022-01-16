@@ -112,6 +112,7 @@ int main(int argc, char** argv)
             if (limit > 0) {
                 --limit;
             }
+            printf("\n");
             mvm_dumpStack(stdout, &mvm);
             printf("\nPress enter to execute the next instruction...\n");
             getchar();

@@ -1,29 +1,32 @@
-# Fibonacci numbers
-push 0
-push 1
-jmp main_loop
+jmp main
 
-print_u64_ln:
+print_i64_ln:
     swap 1
-    ncall 3
+    ncall 2
     push 13 # New line ASCII code
     ncall 0 # Print Char
     ret
 
 # Main Loop
-main_loop: dup 1
-      # Calc fib number
-      dup 1
-      plusi
-      dup 0
-      dup 0
+main:
+    push 0
+    push 1
+    push 30 # Iterations
 
-      # Print fib number
-      call print_u64_ln
+loop:
+    swap 2
+    dup 0
+    call print_i64_ln
+    dup 1
+    plusi
+    swap 1
+    swap 2
+    push 1
+    minusi
 
-      # Only jmp if fib number is not 1597
-      push 1597
-      eq
-      not
-      jmpif main_loop   # Jump to 'main_loop' label
+    dup 0
+    push 0
+    eq
+    not
+    jmpif loop
 hlt
