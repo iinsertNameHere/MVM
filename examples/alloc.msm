@@ -1,8 +1,10 @@
+#include "./stdlib.mlb"
+
 jmp main
 main:
     push 420
-    ncall 5
+    ncall alloc
     dup 0
-    ncall 4
-    ncall 6
+    call println_ptr
+    ncall free
     hlt

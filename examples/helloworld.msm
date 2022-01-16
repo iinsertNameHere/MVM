@@ -1,27 +1,33 @@
-push 0
-push 13     # \n
-push 33     # !
-push 100    # d
-push 108    # l
-push 114    # r
-push 111    # o
-push 87     # W
-push 32     # SPACE
-push 111    # o
-push 108    # l
-push 108    # l
-push 101    # e
-push 72     # H
+#include "./stdlib.mlb"
 
+jmp main
+
+#define SPACE 32
+#define NL 13
+
+main:
+    push 0
+    push NL
+    push 33     ; !
+    push 100    ; d
+    push 108    ; l
+    push 114    ; r
+    push 111    ; o
+    push 87     ; W
+    push SPACE
+    push 111    ; o
+    push 108    ; l
+    push 108    ; l
+    push 101    ; e
+    push 72     ; H
 printLoop:
     push 1
     dup 1
     gei
-    jmpif nextStep # If not 0 print char
-    jmp end # Else jmp to end
+    jmpif nextStep ; If not 0 print char
+    jmp end ; Else jmp to end
     nextStep:
-    ncall 0
+    ncall print_char
     jmp printLoop
-
 end:
     hlt

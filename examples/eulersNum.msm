@@ -1,7 +1,9 @@
-# sum(1/n!)
-push 1.0        # n
-push 1.0        # n!
-push 1.0        # sum
+#include "./stdlib.mlb"
+
+; sum(1/n!)
+push 1.0        ; n
+push 1.0        ; n!
+push 1.0        ; sum
 loop:
     push 1.0
     dup 2
@@ -23,5 +25,5 @@ loop:
     gef
 
     jmpif loop
-ncall 1
+call println_f64
 hlt

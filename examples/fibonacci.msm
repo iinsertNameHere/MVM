@@ -1,22 +1,19 @@
+#include "./stdlib.mlb"
+
 jmp main
 
-print_i64_ln:
-    swap 1
-    ncall 2
-    push 13 # New line ASCII code
-    ncall 0 # Print Char
-    ret
+; Iterations:
+#define I 30
 
-# Main Loop
+; Main Loop
 main:
     push 0
     push 1
-    push 30 # Iterations
-
+    push I
 loop:
     swap 2
     dup 0
-    call print_i64_ln
+    call println_u64
     dup 1
     plusi
     swap 1

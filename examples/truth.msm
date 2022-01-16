@@ -1,9 +1,17 @@
-push 1 # Truth value
+#include "stdlib.mlb"
+
+jmp main
+
+; Truth value
+#define TRUTH_VAL 1
+
+main:
+    push TRUTH_VAL
 truth:
     dup 0
     push 1
     eq
     dup 1
-    ncall 3
+    ncall print_i64
     jmpif truth
 hlt

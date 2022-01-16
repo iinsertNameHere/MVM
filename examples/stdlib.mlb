@@ -1,0 +1,46 @@
+#define print_char 0
+#define print_f64 1
+#define print_i64 2
+#define print_u64 3
+#define print_ptr 4
+#define alloc 5
+#define free 6
+
+jmp libend
+
+println_char:
+    swap 1
+    ncall print_char
+    push 13
+    ncall print_char
+    ret
+
+println_f64:
+    swap 1
+    ncall print_f64
+    push 13
+    ncall print_char
+    ret
+
+println_i64:
+    swap 1
+    ncall print_i64
+    push 13
+    ncall print_char
+    ret
+
+println_u64:
+    swap 1
+    ncall print_u64
+    push 13
+    ncall print_char
+    ret
+
+println_ptr:
+    swap 1
+    ncall print_ptr
+    push 13
+    ncall print_char
+    ret
+
+libend:
