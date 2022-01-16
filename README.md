@@ -99,7 +99,7 @@ jmp main
 
 # Function
 add:
-    swap 2 # Swap the return addr to the botom.
+    swap 2 # Swap the return addr to the bottom.
     plusf
     swap 1
     ret
