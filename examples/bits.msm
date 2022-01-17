@@ -1,0 +1,44 @@
+;; Print bits of number N
+;; NOTE: Bits are printed in reversed order
+%include "../msmlib/stdlib.mlb"
+%define SPACE 32
+
+%define N 69420
+
+jmp main
+
+mk_space:
+    push SPACE
+    ncall print_char
+    ret
+
+printBits:
+    swap 1 ; Swap return addr to the bottom of the stack
+printBits_loop:
+    ; Print one bit
+    dup 0
+    push 1
+    andb
+    ncall print_u64
+    call mk_space
+
+    ; Increment to next bit
+    push 1
+    shr
+
+    ; Check if last bit
+    dup 0
+    push 0
+    equal
+    not
+
+    ; jmp if the next is not the last bit
+    ; else return
+    jmpif printBits_loop
+    drop
+    ret
+
+main:
+    push N
+    call printBits
+    hlt

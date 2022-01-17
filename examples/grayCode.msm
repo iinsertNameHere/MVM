@@ -1,3 +1,4 @@
+;; Generate a gray-code sequence
 %include "../msmlib/stdlib.mlb"
 
 jmp main
