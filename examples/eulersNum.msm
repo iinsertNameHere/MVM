@@ -1,4 +1,4 @@
-#include "./stdlib.mlb"
+%include "../msmlib/stdlib.mlb"
 
 ; sum(1/n!)
 push 1.0        ; n

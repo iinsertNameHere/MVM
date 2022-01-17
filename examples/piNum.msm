@@ -5,7 +5,7 @@
 ; subsequent odd number. The more times you do this, the closer you will get to pi.
 ;
 
-#include "stdlib.mlb"
+%include "../msmlib/stdlib.mlb"
 
 ; counter
 %define C 750000

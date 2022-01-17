@@ -1,4 +1,4 @@
-#include "./stdlib.mlb"
+%include "../msmlib/stdlib.mlb"
 
 jmp main
 main:

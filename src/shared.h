@@ -40,6 +40,9 @@ StringView sv_chopByDelim(StringView* sv, char delim);
 int sv_eq(StringView a, StringView b);
 int sv_as_int(StringView sv);
 
+#define SV_FORMAT(sv) (int) sv.count, sv.data
+#define PRIsv ".*s"
+
 //////////// EXEPTION Definitions ////////////
 typedef enum {
     EXEPTION_SATE_OK = 0,
@@ -94,6 +97,7 @@ typedef struct {
 //////////// Label Definitions ////////////
 #define LABEL_CAPACITY 1024
 #define DEFERED_OPERANDS_CAPACITY 1024
+#define MAX_INCLUDE_LEVEL 42
 
 typedef struct {
     StringView name;
@@ -147,7 +151,7 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 int numberLiteral_as_Word (StringView sv, Word* out);
-void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Masm* masm);
+void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 ////////////////////////////////////////////
@@ -162,7 +166,7 @@ ExeptionState native_print_ptr(MVM* mvm);
 
 
 //////////// Util Definitions ////////////
-StringView slurp_file(const char* file_path);
+StringView sv_slurpFile(StringView file_path);
 char* shift(int* argc, char*** argv);
 #endif //MVM_SHARED_H
 
@@ -696,8 +700,10 @@ int numberLiteral_as_Word (StringView sv, Word* out)
     return 1;
 }
 
-void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Masm* masm)
+void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level)
 {
+    StringView source_original = sv_slurpFile(inputFile);
+    StringView source = source_original;
     mvm->program_size = 0;
 
     // Pass one
@@ -722,28 +728,50 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
                         StringView value = sv_chopByDelim(&line, ' ');
                         Word word = {0};
                         if (!numberLiteral_as_Word(value, &word)) {
-                            fprintf(stderr, "%s:%d: ERORR: '%.*s' is not a number!\n", inputFile, lineNum, (int) value.count, value.data);
+                            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is not a number!\n", SV_FORMAT(inputFile), lineNum,
+                                    (int) value.count, value.data);
                             exit(1);
                         }
 
                         if (!masm_bindLabel(masm, label, word)) {
-                            fprintf(stderr, "%s:%d: ERORR: '%.*s' is already defined!!\n", inputFile, lineNum, (int) label.count, label.data);
+                            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is already defined!!\n", SV_FORMAT(inputFile), lineNum,
+                                    (int) label.count, label.data);
                             exit(1);
                         }
                     } else {
-                        fprintf(stderr, "%s:%d: ERORR: Definition name expected!\n", inputFile, lineNum);
+                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Definition name expected!\n", SV_FORMAT(inputFile), lineNum);
+                        exit(1);
+                    }
+                } else if (sv_eq(token, cstr_as_sv("include"))) {
+                    line = sv_trim(line);
+                    if (line.count > 0) {
+                        if (*line.data == '"' && line.data[line.count - 1] == '"') {
+                            line.data += 1;
+                            line.count -= 2;
+
+                            if (level + 1 < MAX_INCLUDE_LEVEL) {
+                                mvm_translateSourceFile(mvm, masm, line, level + 1);
+                            } else {
+                                fprintf(stderr, "%" PRIsv ":%d: ERORR: Exceeded maximum-include-level!\n", SV_FORMAT(inputFile), lineNum);
+                                exit(1);
+                            }
+                        } else {
+                            fprintf(stderr, "%" PRIsv ":%d: ERORR: Include-Path has to be surrounded with quotation marks!\n", SV_FORMAT(inputFile), lineNum);
+                            exit(1);
+                        }
+                    } else {
+                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Include-Path is not provided!\n", SV_FORMAT(inputFile), lineNum);
                         exit(1);
                     }
                 } else {
-                    fprintf(stderr, "%s:%d: ERORR: Unknown preprocessor directive '%.*s'!\n", inputFile, lineNum, (int) token.count, token.data);
-                    exit(1);
+
                 }
             } else {
 
                 if (token.count > 0 && token.data[token.count - 1] == ':') {
                     StringView label = (StringView) {.count = token.count - 1, .data = token.data};
                     if (!masm_bindLabel(masm, label, (Word) { .as_u64 = mvm->program_size })) {
-                        fprintf(stderr, "%s:%d: ERORR: '%.*s' is already defined!\n", inputFile, lineNum, (int) label.count, label.data);
+                        fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is already defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
                         exit(1);
                     }
                     token = sv_trim(sv_chopByDelim(&line, ' '));
@@ -757,8 +785,8 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
                         mvm->program[mvm->program_size].type = instType;
                         if (InstHasOperand(instType)) {
                             if (operand.count == 0) {
-                                fprintf(stderr, "%s:%d: ERORR: instruction '%.*s' expects an operand!\n", inputFile,
-                                        lineNum, (int) token.count, token.data);
+                                fprintf(stderr, "%" PRIsv ":%d: ERORR: instruction '%" PRIsv "' expects an operand!\n",
+                                        SV_FORMAT(inputFile), lineNum, SV_FORMAT(token));
                                 exit(1);
                             }
 
@@ -771,7 +799,7 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
                         }
                         mvm->program_size += 1;
                     } else {
-                        fprintf(stderr, "%s:%d: ERORR: Unknown instruction '%.*s'!\n", inputFile, lineNum,
+                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Unknown instruction '%" PRIsv "'!\n", SV_FORMAT(inputFile), lineNum,
                                 (int) token.count, token.data);
                         exit(1);
                     }
@@ -785,7 +813,7 @@ void mvm_translateSource(StringView source, const char* inputFile, MVM* mvm, Mas
         StringView label = masm->deferredOperands[i].label;
         Word* operand = &mvm->program[masm->deferredOperands[i].addr].operand;
         if (!masm_resolveLabel(masm, label, operand)) {
-            fprintf(stderr, "%s:%d: ERORR: '%.*s' is not defined!\n", inputFile, lineNum, (int) label.count, label.data);
+            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is not defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
             exit(1);
         }
     }
@@ -918,22 +946,30 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 }
 
 //////////// Util Definitions ////////////
-StringView slurp_file(const char* file_path)
+StringView sv_slurpFile(StringView filePath)
 {
-    FILE* f = fopen(file_path, "r");
+    char* filePath_cstr = malloc(filePath.count + 1);
+    if (filePath_cstr == NULL) {
+        fprintf(stderr, "ERROR: Could not allocate memory for file-path! : %s\n", strerror(errno));
+        exit(1);
+    }
+    memcpy(filePath_cstr, filePath.data, filePath.count);
+    filePath_cstr[filePath.count] = '\0';
+
+    FILE* f = fopen(filePath_cstr, "r");
     if (f == NULL) {
-        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
     }
 
     if (fseek(f, 0, SEEK_END) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
     }
 
     long m = ftell(f);
     if (m < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
     }
 
@@ -944,17 +980,18 @@ StringView slurp_file(const char* file_path)
     }
 
     if (fseek(f, 0, SEEK_SET) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
     }
 
     size_t n = fread(buffer, 1, m, f);
     if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
     }
 
     fclose(f);
+    free(filePath_cstr);
 
     return (StringView) {
             .count = n,

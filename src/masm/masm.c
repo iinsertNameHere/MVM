@@ -30,9 +30,7 @@ int main(int argc, char** argv)
     }
     const char* outputFilePath = shift(&argc, &argv);
 
-    StringView source_code = slurp_file(inputFilePath);
-
-    mvm_translateSource(source_code, inputFilePath, &mvm, &masm);
+    mvm_translateSourceFile(&mvm, &masm, cstr_as_sv(inputFilePath), 0);
     mvm_saveProgramToFile(&mvm, outputFilePath);
 
     return  0;

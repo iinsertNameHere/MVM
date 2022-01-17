@@ -1,9 +1,9 @@
-#include "stdlib.mlb"
+%include "../msmlib/stdlib.mlb"
 
 jmp main
 
 ; Truth value
-%define T 1
+%define T 0
 
 main:
     push T
