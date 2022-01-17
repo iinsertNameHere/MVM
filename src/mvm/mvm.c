@@ -24,6 +24,8 @@ int main(int argc, char** argv)
     int limit = -1;
     int debug = 0;
     int debugPrint = 0;
+    int error = 0;
+    const char* errorFlag = NULL;
 
     while (argc > 0) {
         const char* flag = shift(&argc, &argv);
@@ -59,14 +61,19 @@ int main(int argc, char** argv)
             }
             debugPrint = 1;
         } else {
-            fprintf(stderr, "ERROR: Unknown flag '%s'\n", flag);
-            usage(stderr);
-            exit(1);
+            error = 1;
+            errorFlag = flag;
         }
     }
 
     if (inputFilePath == NULL) {
         fprintf(stderr, "ERROR: Expected input file!\n");
+        usage(stderr);
+        exit(1);
+    }
+
+    if (error) {
+        fprintf(stderr, "ERROR: Unknown flag '%s'!\n", errorFlag);
         usage(stderr);
         exit(1);
     }
