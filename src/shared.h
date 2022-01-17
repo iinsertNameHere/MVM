@@ -71,11 +71,12 @@ typedef enum {
     INST_MINUSF,
     INST_MULTF,
     INST_DIVF,
-    //INST_ANDB,
-    //INST_ORB,
-    //INST_XORB,
-    //INST_SHR,
-    //INST_SHL,
+    INST_ANDB,
+    INST_ORB,
+    INST_XOR,
+    INST_NOTB,
+    INST_SHR,
+    INST_SHL,
     INST_JMP,
     INST_JMPIF,
     INST_CALL,
@@ -284,29 +285,35 @@ const char* exeption_as_cstr(ExeptionState exeption)
 const char* InstName(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:         return "nop";
-        case INST_PUSH:        return "push";
-        case INST_DUP:         return "dup";
-        case INST_SWAP:        return "swap";
-        case INST_DROP:        return "drop";
-        case INST_PLUSI:       return "plusi";
-        case INST_MINUSI:      return "minusi";
-        case INST_MULTI:       return "multi";
-        case INST_DIVI:        return "divi";
-        case INST_PLUSF:       return "plusf";
-        case INST_MINUSF:      return "minusf";
-        case INST_MULTF:       return "multf";
-        case INST_DIVF:        return "divf";
-        case INST_JMP:         return "jmp";
-        case INST_JMPIF:       return "jmpif";
-        case INST_CALL:        return "call";
-        case INST_NATIVECALL:  return "ncall";
-        case INST_RET:         return "ret";
-        case INST_EQ:          return "equal";
-        case INST_NOT:         return "not";
-        case INST_GEF:         return "geeqf";
-        case INST_GEI:         return "geeqi";
-        case INST_HALT:        return "hlt";
+        case INST_NOP:        return "nop";
+        case INST_PUSH:       return "push";
+        case INST_DUP:        return "dup";
+        case INST_SWAP:       return "swap";
+        case INST_DROP:       return "drop";
+        case INST_PLUSI:      return "plusi";
+        case INST_MINUSI:     return "minusi";
+        case INST_MULTI:      return "multi";
+        case INST_DIVI:       return "divi";
+        case INST_PLUSF:      return "plusf";
+        case INST_MINUSF:     return "minusf";
+        case INST_MULTF:      return "multf";
+        case INST_DIVF:       return "divf";
+        case INST_ANDB:       return "andb";
+        case INST_ORB:        return "orb";
+        case INST_XOR:        return "xor";
+        case INST_NOTB:       return "notb";
+        case INST_SHR:        return "shr";
+        case INST_SHL:        return "shl";
+        case INST_JMP:        return "jmp";
+        case INST_JMPIF:      return "jmpif";
+        case INST_CALL:       return "call";
+        case INST_NATIVECALL: return "ncall";
+        case INST_RET:        return "ret";
+        case INST_EQ:         return "equal";
+        case INST_NOT:        return "not";
+        case INST_GEF:        return "geeqf";
+        case INST_GEI:        return "geeqi";
+        case INST_HALT:       return "hlt";
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstName: Unreachable");
@@ -329,29 +336,35 @@ int GetInstName(StringView name, InstType* out)
 int InstHasOperand(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:         return 0;
-        case INST_PUSH:        return 1;
-        case INST_DUP:         return 1;
-        case INST_SWAP:        return 1;
-        case INST_DROP:        return 0;
-        case INST_PLUSI:       return 0;
-        case INST_MINUSI:      return 0;
-        case INST_MULTI:       return 0;
-        case INST_DIVI:        return 0;
-        case INST_PLUSF:       return 0;
-        case INST_MINUSF:      return 0;
-        case INST_MULTF:       return 0;
-        case INST_DIVF:        return 0;
-        case INST_JMP:         return 1;
-        case INST_JMPIF:       return 1;
-        case INST_CALL:        return 1;
-        case INST_NATIVECALL:  return 1;
-        case INST_RET:         return 0;
-        case INST_EQ:          return 0;
-        case INST_NOT:         return 0;
-        case INST_GEF:         return 0;
-        case INST_GEI:         return 0;
-        case INST_HALT:        return 0;
+        case INST_NOP:        return 0;
+        case INST_PUSH:       return 1;
+        case INST_DUP:        return 1;
+        case INST_SWAP:       return 1;
+        case INST_DROP:       return 0;
+        case INST_PLUSI:      return 0;
+        case INST_MINUSI:     return 0;
+        case INST_MULTI:      return 0;
+        case INST_DIVI:       return 0;
+        case INST_ANDB:       return 0;
+        case INST_ORB:        return 0;
+        case INST_XOR:        return 0;
+        case INST_NOTB:       return 0;
+        case INST_SHR:        return 0;
+        case INST_SHL:        return 0;
+        case INST_PLUSF:      return 0;
+        case INST_MINUSF:     return 0;
+        case INST_MULTF:      return 0;
+        case INST_DIVF:       return 0;
+        case INST_JMP:        return 1;
+        case INST_JMPIF:      return 1;
+        case INST_CALL:       return 1;
+        case INST_NATIVECALL: return 1;
+        case INST_RET:        return 0;
+        case INST_EQ:         return 0;
+        case INST_NOT:        return 0;
+        case INST_GEF:        return 0;
+        case INST_GEI:        return 0;
+        case INST_HALT:       return 0;
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstHasOperand: Unreachable");
@@ -517,6 +530,48 @@ ExeptionState mvm_execInst(MVM* mvm)
             }
 
             mvm->stack[mvm->stack_size - 2].as_f64 /= mvm->stack[mvm->stack_size - 1].as_f64 ;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_ANDB: {
+            break;
+        }
+
+        case INST_ORB: {
+            break;
+        }
+
+        case INST_XOR: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 ^ mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_NOTB: {
+            break;
+        }
+
+        case INST_SHR: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_SHL: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 << mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;

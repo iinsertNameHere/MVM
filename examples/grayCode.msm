@@ -1,0 +1,37 @@
+%include "../msmlib/stdlib.mlb"
+
+jmp main
+
+%define N 30
+
+grayCode:
+    swap 1 ; Swap return addr to the bottom of the stack
+grayCode_loop:
+    ; Make gray-code number
+    dup 0
+    dup 0
+    push 1
+    shr
+    xor
+    call println_u64
+
+    ; Increment counter
+    push 1
+    plusi
+
+    ; Check if counter equal N
+    dup 0
+    push N
+    equal
+    not
+
+    ; jmp if counter not equal N
+    ; else return
+    jmpif grayCode_loop
+    drop
+    ret
+
+main:
+    push 0
+    call grayCode
+    hlt
