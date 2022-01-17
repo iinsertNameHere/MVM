@@ -1,8 +1,8 @@
 %include "../msmlib/stdlib.mlb"
+%define MEMORY_SIZE 420
 
-jmp main
 main:
-    push 420
+    push MEMORY_SIZE
     ncall alloc
     dup 0
     call println_ptr
