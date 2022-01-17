@@ -98,6 +98,7 @@ typedef struct {
 #define LABEL_CAPACITY 1024
 #define DEFERED_OPERANDS_CAPACITY 1024
 #define MAX_INCLUDE_LEVEL 42
+#define MASM_MEMORY_CAPACITY_1GB (1000 * 1000 * 1000)
 
 typedef struct {
     StringView name;
@@ -114,11 +115,19 @@ typedef struct {
     size_t lables_size;
     DeferredOperand deferredOperands[DEFERED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
+    #ifdef CMAKE_CUSTOM_MASM_MEMORY
+    char memory[CMAKE_CUSTOM_MASM_MEMORY];
+    #else
+    char memory[MASM_MEMORY_CAPACITY_1GB];
+    #endif
+    size_t memory_size;
 } Masm;
 
+void* masm_alloc(Masm* masm, size_t size);
 int masm_resolveLabel(const Masm* masm, StringView name, Word* out);
 int masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
+StringView masm_slurpFile(Masm* masm, StringView file_path);
 
 //////////// MVM Definitions ////////////
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack underflow if lager than 942.
@@ -166,7 +175,6 @@ ExeptionState native_print_ptr(MVM* mvm);
 
 
 //////////// Util Definitions ////////////
-StringView sv_slurpFile(StringView file_path);
 char* shift(int* argc, char*** argv);
 #endif //MVM_SHARED_H
 
@@ -702,7 +710,7 @@ int numberLiteral_as_Word (StringView sv, Word* out)
 
 void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level)
 {
-    StringView source_original = sv_slurpFile(inputFile);
+    StringView source_original = masm_slurpFile(masm, inputFile);
     StringView source = source_original;
     mvm->program_size = 0;
 
@@ -914,6 +922,18 @@ ExeptionState native_print_ptr(MVM* mvm)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////// Label Definitions ////////////
+void* masm_alloc(Masm* masm, size_t size)
+{
+    #ifdef CMAKE_CUSTOM_MASM_MEMORY
+    assert(masm->memory_size + size <= CMAKE_CUSTOM_MASM_MEMORY);
+    #else
+    assert(masm->memory_size + size <= MASM_MEMORY_CAPACITY_1GB);
+    #endif
+    void* ptr = masm->memory + masm->memory_size;
+    masm->memory_size += size;
+    return ptr;
+}
+
 int masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 {
     for (size_t i = 0; i < masm->lables_size; ++i) {
@@ -946,9 +966,9 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 }
 
 //////////// Util Definitions ////////////
-StringView sv_slurpFile(StringView filePath)
+StringView masm_slurpFile(Masm* masm, StringView filePath)
 {
-    char* filePath_cstr = malloc(filePath.count + 1);
+    char* filePath_cstr = masm_alloc(masm, filePath.count + 1);
     if (filePath_cstr == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file-path! : %s\n", strerror(errno));
         exit(1);
@@ -973,7 +993,7 @@ StringView sv_slurpFile(StringView filePath)
         exit(1);
     }
 
-    char* buffer = malloc(m);
+    char* buffer = masm_alloc(masm, m);
     if (buffer == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file! : %s\n", strerror(errno));
         exit(1);
@@ -991,7 +1011,6 @@ StringView sv_slurpFile(StringView filePath)
     }
 
     fclose(f);
-    free(filePath_cstr);
 
     return (StringView) {
             .count = n,
