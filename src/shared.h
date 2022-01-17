@@ -569,7 +569,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 1) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 1].as_u64 = ~mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -579,7 +579,8 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = ~mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
         }
