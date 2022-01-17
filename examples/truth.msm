@@ -10,7 +10,7 @@ main:
 truth:
     dup 0
     push 1
-    eq
+    equal
     dup 1
     ncall print_i64
     jmpif truth

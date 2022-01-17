@@ -71,6 +71,11 @@ typedef enum {
     INST_MINUSF,
     INST_MULTF,
     INST_DIVF,
+    //INST_ANDB,
+    //INST_ORB,
+    //INST_XORB,
+    //INST_SHR,
+    //INST_SHL,
     INST_JMP,
     INST_JMPIF,
     INST_CALL,
@@ -297,10 +302,10 @@ const char* InstName(InstType instType)
         case INST_CALL:        return "call";
         case INST_NATIVECALL:  return "ncall";
         case INST_RET:         return "ret";
-        case INST_EQ:          return "eq";
+        case INST_EQ:          return "equal";
         case INST_NOT:         return "not";
-        case INST_GEF:         return "gef";
-        case INST_GEI:         return "gei";
+        case INST_GEF:         return "geeqf";
+        case INST_GEI:         return "geeqi";
         case INST_HALT:        return "hlt";
         case NUMBER_OF_INSTS:
         default:

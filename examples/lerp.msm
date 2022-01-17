@@ -44,7 +44,7 @@ loop:
 
     dup 1
     push 1.0
-    gef
+    geeqf
 
     jmpif loop
 hlt
