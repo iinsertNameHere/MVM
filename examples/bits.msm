@@ -41,4 +41,6 @@ printBits_loop:
 main:
     push N
     call printBits
+    push NL
+    ncall print_char
     hlt
