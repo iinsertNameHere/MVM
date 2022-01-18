@@ -19,16 +19,14 @@
 #define MASM_LABEL_CAPACITY 1024
 #define MASM_DEFERRED_OPERANDS_CAPACITY 1024
 #define MASM_MAX_INCLUDES 42
-#define MASM_MEMORY_CAPACITY_1GB (1000 * 1000 * 1000)
+#define MASM_MEMORY_CAPACITY (1000 * 1000 * 1000) // 1GB
 #define MASM_COMMENT_SYMBOL ';'
 #define MASM_PP_SYMBOL '%'
 
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack-underflow if lager than 942.
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
-#define MVM_MEMORY_CAPACITY (1000 * 1000 * 1000)
-
-typedef uint64_t InstAddr;
+#define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
 
 typedef enum {false, true} bool;
 
@@ -65,12 +63,16 @@ typedef enum {
 
 const char* exeption_as_cstr(ExeptionState exeption);
 
+typedef uint64_t InstAddr;
+
 typedef enum {
     INST_NOP = 0,
+
     INST_PUSH,
     INST_DUP,
     INST_SWAP,
     INST_DROP,
+
     INST_PLUSI,
     INST_MINUSI,
     INST_MULTI,
@@ -79,22 +81,35 @@ typedef enum {
     INST_MINUSF,
     INST_MULTF,
     INST_DIVF,
+
     INST_ANDB,
     INST_ORB,
     INST_XOR,
     INST_NOTB,
     INST_SHR,
     INST_SHL,
+
     INST_JMP,
     INST_JMPIF,
     INST_CALL,
-    INST_NATIVECALL,
+    INST_INT,
     INST_RET,
+
     INST_EQ,
     INST_NOT,
     INST_GEF,
     INST_GEI,
+
     INST_HALT,
+
+    INST_READ8,
+    INST_READ16,
+    INST_READ32,
+    INST_READ64,
+    INST_WRITE8,
+    INST_WRITE16,
+    INST_WRITE32,
+    INST_WRITE64,
 
     NUMBER_OF_INSTS
 } InstType;
@@ -123,7 +138,7 @@ typedef struct {
     size_t lables_size;
     DeferredOperand deferredOperands[MASM_DEFERRED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
-    char memory[MASM_MEMORY_CAPACITY_1GB];
+    char memory[MASM_MEMORY_CAPACITY];
     size_t memory_size;
 } Masm;
 
@@ -269,35 +284,35 @@ const char* exeption_as_cstr(ExeptionState exeption)
 const char* InstName(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:        return "nop";
-        case INST_PUSH:       return "push";
-        case INST_DUP:        return "dup";
-        case INST_SWAP:       return "swap";
-        case INST_DROP:       return "drop";
-        case INST_PLUSI:      return "plusi";
-        case INST_MINUSI:     return "minusi";
-        case INST_MULTI:      return "multi";
-        case INST_DIVI:       return "divi";
-        case INST_PLUSF:      return "plusf";
-        case INST_MINUSF:     return "minusf";
-        case INST_MULTF:      return "multf";
-        case INST_DIVF:       return "divf";
-        case INST_ANDB:       return "andb";
-        case INST_ORB:        return "orb";
-        case INST_XOR:        return "xor";
-        case INST_NOTB:       return "notb";
-        case INST_SHR:        return "shr";
-        case INST_SHL:        return "shl";
-        case INST_JMP:        return "jmp";
-        case INST_JMPIF:      return "jmpif";
-        case INST_CALL:       return "call";
-        case INST_NATIVECALL: return "ncall";
-        case INST_RET:        return "ret";
-        case INST_EQ:         return "equal";
-        case INST_NOT:        return "not";
-        case INST_GEF:        return "geeqf";
-        case INST_GEI:        return "geeqi";
-        case INST_HALT:       return "hlt";
+        case INST_NOP:    return "nop";
+        case INST_PUSH:   return "push";
+        case INST_DUP:    return "dup";
+        case INST_SWAP:   return "swap";
+        case INST_DROP:   return "drop";
+        case INST_PLUSI:  return "plusi";
+        case INST_MINUSI: return "minusi";
+        case INST_MULTI:  return "multi";
+        case INST_DIVI:   return "divi";
+        case INST_PLUSF:  return "plusf";
+        case INST_MINUSF: return "minusf";
+        case INST_MULTF:  return "multf";
+        case INST_DIVF:   return "divf";
+        case INST_ANDB:   return "andb";
+        case INST_ORB:    return "orb";
+        case INST_XOR:    return "xor";
+        case INST_NOTB:   return "notb";
+        case INST_SHR:    return "shr";
+        case INST_SHL:    return "shl";
+        case INST_JMP:    return "jmp";
+        case INST_JMPIF:  return "jmpif";
+        case INST_CALL:   return "call";
+        case INST_INT:    return "int";
+        case INST_RET:    return "ret";
+        case INST_EQ:     return "equal";
+        case INST_NOT:    return "not";
+        case INST_GEF:    return "geeqf";
+        case INST_GEI:    return "geeqi";
+        case INST_HALT:   return "hlt";
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstName: Unreachable");
@@ -320,35 +335,35 @@ bool GetInstName(StringView name, InstType* out)
 bool InstHasOperand(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:        return false;
-        case INST_PUSH:       return true;
-        case INST_DUP:        return true;
-        case INST_SWAP:       return true;
-        case INST_DROP:       return false;
-        case INST_PLUSI:      return false;
-        case INST_MINUSI:     return false;
-        case INST_MULTI:      return false;
-        case INST_DIVI:       return false;
-        case INST_ANDB:       return false;
-        case INST_ORB:        return false;
-        case INST_XOR:        return false;
-        case INST_NOTB:       return false;
-        case INST_SHR:        return false;
-        case INST_SHL:        return false;
-        case INST_PLUSF:      return false;
-        case INST_MINUSF:     return false;
-        case INST_MULTF:      return false;
-        case INST_DIVF:       return false;
-        case INST_JMP:        return true;
-        case INST_JMPIF:      return true;
-        case INST_CALL:       return true;
-        case INST_NATIVECALL: return true;
-        case INST_RET:        return false;
-        case INST_EQ:         return false;
-        case INST_NOT:        return false;
-        case INST_GEF:        return false;
-        case INST_GEI:        return false;
-        case INST_HALT:       return false;
+        case INST_NOP:    return false;
+        case INST_PUSH:   return true;
+        case INST_DUP:    return true;
+        case INST_SWAP:   return true;
+        case INST_DROP:   return false;
+        case INST_PLUSI:  return false;
+        case INST_MINUSI: return false;
+        case INST_MULTI:  return false;
+        case INST_DIVI:   return false;
+        case INST_ANDB:   return false;
+        case INST_ORB:    return false;
+        case INST_XOR:    return false;
+        case INST_NOTB:   return false;
+        case INST_SHR:    return false;
+        case INST_SHL:    return false;
+        case INST_PLUSF:  return false;
+        case INST_MINUSF: return false;
+        case INST_MULTF:  return false;
+        case INST_DIVF:   return false;
+        case INST_JMP:    return true;
+        case INST_JMPIF:  return true;
+        case INST_CALL:   return true;
+        case INST_INT:    return true;
+        case INST_RET:    return false;
+        case INST_EQ:     return false;
+        case INST_NOT:    return false;
+        case INST_GEF:    return false;
+        case INST_GEI:    return false;
+        case INST_HALT:   return false;
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstHasOperand: Unreachable");
@@ -361,7 +376,7 @@ bool InstHasOperand(InstType instType)
 
 void* masm_alloc(Masm* masm, size_t size)
 {
-    assert(masm->memory_size + size <= MASM_MEMORY_CAPACITY_1GB);
+    assert(masm->memory_size + size <= MASM_MEMORY_CAPACITY);
     void* ptr = masm->memory + masm->memory_size;
     masm->memory_size += size;
     return ptr;
@@ -901,7 +916,7 @@ ExeptionState mvm_execInst(MVM* mvm)
             break;
         }
 
-        case INST_NATIVECALL: {
+        case INST_INT: {
             if (inst.operand.as_u64 > mvm->natives_size) {
                 return EXEPTION_ILLEGAL_OPERAND;
             }

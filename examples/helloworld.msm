@@ -26,7 +26,7 @@ printLoop:
     jmpif nextStep ; If not 0 print char
     jmp end ; Else jmp to end
     nextStep:
-    ncall print_char
+    int print_char
     jmp printLoop
 end:
     hlt

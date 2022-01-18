@@ -3,8 +3,8 @@
 
 main:
     push MEMORY_SIZE
-    ncall alloc
+    int alloc
     dup 0
     call println_ptr
-    ncall free
+    int free
     hlt

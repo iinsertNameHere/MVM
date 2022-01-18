@@ -9,7 +9,7 @@ jmp main
 
 mk_space:
     push SPACE
-    ncall print_char
+    int print_char
     ret
 
 printBits:
@@ -19,7 +19,7 @@ printBits_loop:
     dup 0
     push 1
     andb
-    ncall print_u64
+    int print_u64
     call mk_space
 
     ; Increment to next bit
@@ -42,5 +42,5 @@ main:
     push N
     call printBits
     push NL
-    ncall print_char
+    int print_char
     hlt

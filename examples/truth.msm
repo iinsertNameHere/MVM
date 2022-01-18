@@ -12,6 +12,6 @@ truth:
     push 1
     equal
     dup 1
-    ncall print_i64
+    int print_i64
     jmpif truth
 hlt
