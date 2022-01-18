@@ -18,6 +18,8 @@
 
 typedef uint64_t InstAddr;
 
+typedef enum {false, true} bool;
+
 typedef union {
     uint64_t as_u64;
     int64_t as_i64;
@@ -37,7 +39,7 @@ StringView sv_masmrim(StringView sv);
 StringView sv_rtrim(StringView sv);
 StringView sv_trim(StringView sv);
 StringView sv_chopByDelim(StringView* sv, char delim);
-int sv_eq(StringView a, StringView b);
+bool sv_eq(StringView a, StringView b);
 int sv_as_int(StringView sv);
 
 #define SV_FORMAT(sv) (int) sv.count, sv.data
@@ -92,8 +94,8 @@ typedef enum {
 } InstType;
 
 const char* InstName(InstType instType);
-int GetInstName(StringView name, InstType* out);
-int InstHasOperand(InstType instType);
+bool GetInstName(StringView name, InstType* out);
+bool InstHasOperand(InstType instType);
 
 typedef struct {
     InstType type;
@@ -130,8 +132,8 @@ typedef struct {
 } Masm;
 
 void* masm_alloc(Masm* masm, size_t size);
-int masm_resolveLabel(const Masm* masm, StringView name, Word* out);
-int masm_bindLabel(Masm* masm, StringView name, Word word);
+bool masm_resolveLabel(const Masm* masm, StringView name, Word* out);
+bool masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 StringView masm_slurpFile(Masm* masm, StringView file_path);
 
@@ -157,7 +159,7 @@ struct MVM {
     MvmNative natives[MVM_NATIVES_CAPACITY];
     size_t natives_size;
 
-    int halt;
+    bool halt;
 };
 
 ExeptionState mvm_execInst(MVM* mvm);
@@ -165,7 +167,7 @@ void mvm_pushNative(MVM* mvm, MvmNative);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
-int numberLiteral_as_Word (StringView sv, Word* out);
+bool numberLiteral_as_Word (StringView sv, Word* out);
 void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
@@ -244,10 +246,10 @@ StringView sv_chopByDelim(StringView* sv, char delim)
     return resumasm;
 }
 
-int sv_eq(StringView a, StringView b)
+bool sv_eq(StringView a, StringView b)
 {
     if (a.count != b.count) {
-        return 0;
+        return false;
     }
     else {
         return memcmp(a.data, b.data, a.count) == 0;
@@ -322,49 +324,49 @@ const char* InstName(InstType instType)
     return "";
 }
 
-int GetInstName(StringView name, InstType* out)
+bool GetInstName(StringView name, InstType* out)
 {
     for (InstType type = (InstType)0; type < NUMBER_OF_INSTS; type += 1) {
         if (sv_eq(cstr_as_sv(InstName(type)), name)) {
             *out = type;
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int InstHasOperand(InstType instType)
+bool InstHasOperand(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:        return 0;
-        case INST_PUSH:       return 1;
-        case INST_DUP:        return 1;
-        case INST_SWAP:       return 1;
-        case INST_DROP:       return 0;
-        case INST_PLUSI:      return 0;
-        case INST_MINUSI:     return 0;
-        case INST_MULTI:      return 0;
-        case INST_DIVI:       return 0;
-        case INST_ANDB:       return 0;
-        case INST_ORB:        return 0;
-        case INST_XOR:        return 0;
-        case INST_NOTB:       return 0;
-        case INST_SHR:        return 0;
-        case INST_SHL:        return 0;
-        case INST_PLUSF:      return 0;
-        case INST_MINUSF:     return 0;
-        case INST_MULTF:      return 0;
-        case INST_DIVF:       return 0;
-        case INST_JMP:        return 1;
-        case INST_JMPIF:      return 1;
-        case INST_CALL:       return 1;
-        case INST_NATIVECALL: return 1;
-        case INST_RET:        return 0;
-        case INST_EQ:         return 0;
-        case INST_NOT:        return 0;
-        case INST_GEF:        return 0;
-        case INST_GEI:        return 0;
-        case INST_HALT:       return 0;
+        case INST_NOP:        return false;
+        case INST_PUSH:       return true;
+        case INST_DUP:        return true;
+        case INST_SWAP:       return true;
+        case INST_DROP:       return false;
+        case INST_PLUSI:      return false;
+        case INST_MINUSI:     return false;
+        case INST_MULTI:      return false;
+        case INST_DIVI:       return false;
+        case INST_ANDB:       return false;
+        case INST_ORB:        return false;
+        case INST_XOR:        return false;
+        case INST_NOTB:       return false;
+        case INST_SHR:        return false;
+        case INST_SHL:        return false;
+        case INST_PLUSF:      return false;
+        case INST_MINUSF:     return false;
+        case INST_MULTF:      return false;
+        case INST_DIVF:       return false;
+        case INST_JMP:        return true;
+        case INST_JMPIF:      return true;
+        case INST_CALL:       return true;
+        case INST_NATIVECALL: return true;
+        case INST_RET:        return false;
+        case INST_EQ:         return false;
+        case INST_NOT:        return false;
+        case INST_GEF:        return false;
+        case INST_GEI:        return false;
+        case INST_HALT:       return false;
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstHasOperand: Unreachable");
@@ -641,7 +643,7 @@ ExeptionState mvm_execInst(MVM* mvm)
         }
 
         case INST_HALT: {
-            mvm->halt = 1;
+            mvm->halt = true;
             break;
         }
 
@@ -765,7 +767,7 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
     fclose(f);
 }
 
-int numberLiteral_as_Word (StringView sv, Word* out)
+bool numberLiteral_as_Word (StringView sv, Word* out)
 {
     assert(sv.count < 1024);
     char cstr[sv.count + 1];
@@ -779,11 +781,11 @@ int numberLiteral_as_Word (StringView sv, Word* out)
     if ((size_t)(endptr - cstr) != sv.count) {
         result.as_f64 = strtod(cstr, &endptr);
         if ((size_t)(endptr - cstr) != sv.count) {
-            return 0;
+            return false;
         }
     }
     *out = result;
-    return 1;
+    return true;
 }
 
 void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level)
@@ -1012,26 +1014,26 @@ void* masm_alloc(Masm* masm, size_t size)
     return ptr;
 }
 
-int masm_resolveLabel(const Masm* masm, StringView name, Word* out)
+bool masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 {
     for (size_t i = 0; i < masm->lables_size; ++i) {
         if (sv_eq(masm->labels[i].name, name)) {
             *out = masm->labels[i].word;
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int masm_bindLabel(Masm* masm, StringView name, Word word)
+bool masm_bindLabel(Masm* masm, StringView name, Word word)
 {
     assert(masm->lables_size < LABEL_CAPACITY);
     Word ignore =  {0};
     if (!masm_resolveLabel(masm, name, &ignore)) {
         masm->labels[masm->lables_size++] = (Label) {.name = name, .word = word};
-        return 1;
+        return true;
     }
-    return 0;
+    return false;
 }
 
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
