@@ -1,8 +1,21 @@
 %include "../msmlib/stdlib.mlb"
 
+%define SPACE 32
+
 jmp main
 
-%define SPACE 32
+print_str:
+    push 0
+    dup 2
+    equal
+    jmpif print_str_end
+    swap 1
+    int print_char
+    jmp print_str
+print_str_end:
+    swap 1
+    drop
+    ret
 
 main:
     push 0
@@ -19,14 +32,6 @@ main:
     push 108    ; l
     push 101    ; e
     push 72     ; H
-printLoop:
-    push 1
-    dup 1
-    geeqi
-    jmpif nextStep ; If not 0 print char
-    jmp end ; Else jmp to end
-    nextStep:
-    int print_char
-    jmp printLoop
-end:
+
+    call print_str
     hlt
