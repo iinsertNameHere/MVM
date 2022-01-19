@@ -41,7 +41,7 @@ print_mem_loop:
     read8
     int print_char
 
-    ; Zeroing memory ad I
+    ; Zeroing memory at I
     dup 0
     push 0
     write8
