@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(slick)
+project(mvm_tools)
 
 set(CMAKE_C_STANDARD 11)
 
