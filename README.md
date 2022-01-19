@@ -171,3 +171,10 @@ In [msm](#msm) all directives start with a percent sign as shown below.
 | print_ptr      | 4       | `ptr`        | Prints the given `ptr` value to stdout.                                         |
 | alloc          | 5       | `size`       | Allocates a block of memory, returning a pointer to the beginning of the block. |
 | free           | 6       | `ptr`        | Deallocates a space previously allocated by alloc, using the given 'ptr' value. |
+<br>
+
+In [msm](#msm) interrupts are used as shown below.
+```asm
+push 420
+int 2
+```
