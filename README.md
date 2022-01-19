@@ -1,5 +1,5 @@
-# Slick
- #### All Slick Tools
+# MVM
+ #### All MVM Tools
  + [mvm](#mvm): A VM, just like jvm.
  + [masm](#masm): A Compiler that compiles the VM's Assembly language.
  + [msm](#msm): Assembly language for the VM.
