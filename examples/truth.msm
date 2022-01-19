@@ -1,17 +1,28 @@
+; Classic Truth-machine example
 %include "../msmlib/stdlib.mlb"
 
 jmp main
 
-; Truth value
-%define T 0
+; Truth value (can only be 1 or 0)
+; 1 = True
+; 0 = False
+%define T 1
+
+truth:
+    swap 1 ; Swap return addr to the bottom of the stack
+truth_loop:
+    ; Printing T
+    dup 0
+    int print_i64
+    dup 0
+
+    ; jmp if T is 1
+    ; else return
+    jmpif truth_loop
+    drop
+    ret
 
 main:
     push T
-truth:
-    dup 0
-    push 1
-    equal
-    dup 1
-    int print_i64
-    jmpif truth
-hlt
+    call truth
+    hlt

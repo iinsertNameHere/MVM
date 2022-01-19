@@ -1,24 +1,35 @@
+;; Simple Hallo-World example, not involving the memory operations
 %include "../msmlib/stdlib.mlb"
 
+; Define SPACE ascii code
 %define SPACE 32
 
-jmp main
+jmp main ; Skip function definitions
 
 print_str:
+    ; Check if char is 0
     push 0
     dup 2
     equal
+
+    ; jmp if char is 0
+    ; else continue
     jmpif print_str_end
+
+    ; Printing char
     swap 1
     int print_char
     jmp print_str
 print_str_end:
+    ; Cleanup and return
     swap 1
     drop
     ret
 
+; Main label
 main:
-    push 0
+    ; Pushing 0 terminated str as ascii codes to the stack.
+    push 0      ; null terminate
     push NL
     push 33     ; !
     push 100    ; d
@@ -33,5 +44,6 @@ main:
     push 101    ; e
     push 72     ; H
 
+    ; Printing
     call print_str
     hlt

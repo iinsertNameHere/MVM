@@ -1,53 +1,70 @@
+;; Advanced Hallo-World example, involving basic memory operations
 %include "../msmlib/stdlib.mlb"
 
+; Define SPACE ascii code
 %define SPACE 32
 
-jmp main
+jmp main ; Skip function definitions
 
 write_mem:
     push 0 ; I
     swap 1
 write_mem_loop:
+    ; Writing one char to the memory at I
     swap 1
     dup 0
     dup 3
     write8
 
+    ; Incrementing the I
     push 1
     plusi
 
+    ; Checking if next char is 0
     swap 2
     push 0
     equal
     not
 
+    ; jmp if next char is not 0
+    ; else return
    jmpif write_mem_loop
     ret
 
 print_mem:
-    swap 1
+    ; Given: I
+    swap 1 ; Swap return addr to the bottom of the stack
 print_mem_loop:
+
+    ; Reading and printing char from I
     dup 0
     read8
     int print_char
 
+    ; Zeroing memory ad I
     dup 0
     push 0
     write8
 
+    ; Decrement I
     push 1
     minusi
 
+    ; Checking if I equal to -1
     push -1
     dup 1
     equal
     not
 
+   ; jmp if I is not -1
+   ; else return
    jmpif print_mem_loop
-   drop
+   drop ; cleanup I
    ret
 
+; Main label
 main:
+    ; Pushing 0 terminated str in reverse order as ascii codes to the stack.
     push 0      ; null terminate
 
     push 72     ; H
@@ -64,7 +81,9 @@ main:
     push 33     ; !
     push NL
 
+    ; Writing the str to the memory
     call write_mem
 
+    ; Printing
     call print_mem
     hlt

@@ -21,9 +21,13 @@ loop:
     push 1
     minusi
 
+    ; Check if I is 0
     dup 0
     push 0
     equal
     not
+
+    ; jmp if I is not 0
+    ; else hlt
     jmpif loop
 hlt

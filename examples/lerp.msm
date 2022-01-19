@@ -1,3 +1,4 @@
+; Lerp calculate example
 %include "../msmlib/stdlib.mlb"
 
 jmp main

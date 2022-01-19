@@ -1,8 +1,8 @@
+;; Calculate the eulers number.
 %include "../msmlib/stdlib.mlb"
 
-; sum(1/n!)
-push 1.0        ; n
-push 1.0        ; n!
+push 1.0
+push 1.0
 push 1.0        ; sum
 loop:
     push 1.0
@@ -20,10 +20,12 @@ loop:
     swap 1
     swap 2
 
+    ; check if iteration 100 is reached
     dup 2
     push 100.0
     geeqf
 
+    ; jmp if iteration is not the 100st
     jmpif loop
 call println_f64
 hlt
