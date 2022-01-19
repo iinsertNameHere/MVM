@@ -1,0 +1,40 @@
+%include "../msmlib/stdlib.mlb"
+
+%define N 16
+
+jmp main
+
+; addr
+; N
+; i + 1
+
+fillmem:
+    swap 1 ; Swap return addr to the bottom of the stack
+    push 0 ; I
+fillmem_loop:
+    ; Write I to addr I in the memory
+    dup 0
+    dup 0
+    write8
+
+    ; Increment I
+    push 1
+    plusi
+
+    ; Check if I equals N
+    dup 0
+    dup 2
+    equal
+    not
+
+    ; jmp if I equals N
+    ; else return
+    jmpif fillmem_loop
+    drop
+    drop
+    ret
+
+main:
+    push N
+    call fillmem
+    hlt

@@ -73,7 +73,7 @@ int main(int argc, char** argv)
     mvm_saveProgramToFile(&mvm, outputFilePath);
 
     if (debug) {
-        printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.memory_size);
+        printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.tmp_memory_size);
     }
 
     return  0;

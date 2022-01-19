@@ -19,14 +19,15 @@
 #define MASM_LABEL_CAPACITY 1024
 #define MASM_DEFERRED_OPERANDS_CAPACITY 1024
 #define MASM_MAX_INCLUDES 42
-#define MASM_MEMORY_CAPACITY (1000 * 1000 * 1000) // 1GB
+#define MASM_TMP_MEMORY_CAPACITY (1000 * 1000 * 1000) // 1GB
 #define MASM_COMMENT_SYMBOL ';'
 #define MASM_PP_SYMBOL '%'
 
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack-underflow if lager than 942.
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
-#define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
+//#define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
+#define MVM_MEMORY_CAPACITY 20
 
 typedef enum {false, true} bool;
 
@@ -59,6 +60,7 @@ typedef enum {
     EXEPTION_ILLEGAL_INST,
     EXEPTION_ILLEGAL_INST_ACCESS,
     EXEPTION_ILLEGAL_OPERAND,
+    EXEPTION_MEMORY_ACCESS_VIOLATION,
 } ExeptionState;
 
 const char* exeption_as_cstr(ExeptionState exeption);
@@ -99,6 +101,8 @@ typedef enum {
     INST_NOT,
     INST_GEF,
     INST_GEI,
+    INST_LEF,
+    INST_LEI,
 
     INST_HALT,
 
@@ -133,16 +137,18 @@ typedef struct {
     InstAddr addr;
 } DeferredOperand;
 
+typedef uint64_t MemoryAddr;
+
 typedef struct {
     Label labels[MASM_LABEL_CAPACITY];
     size_t lables_size;
     DeferredOperand deferredOperands[MASM_DEFERRED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
-    char memory[MASM_MEMORY_CAPACITY];
-    size_t memory_size;
+    char tmp_memory[MASM_TMP_MEMORY_CAPACITY];
+    size_t tmp_memory_size;
 } Masm;
 
-void* masm_alloc(Masm* masm, size_t size);
+void* masm_tmpAlloc(Masm* masm, size_t size);
 bool masm_resolveLabel(const Masm* masm, StringView name, Word* out);
 bool masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
@@ -151,7 +157,7 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out);
 
 typedef struct MVM MVM;
 
-typedef ExeptionState (*MvmNative)(MVM*);
+typedef ExeptionState (*MvmInterrupt)(MVM*);
 
 struct MVM {
     Word stack[MVM_STACK_CAPACITY];
@@ -161,16 +167,17 @@ struct MVM {
     uint64_t program_size;
     InstAddr ip;
 
-    MvmNative natives[MVM_NATIVES_CAPACITY];
-    size_t natives_size;
+    MvmInterrupt interrupts[MVM_NATIVES_CAPACITY];
+    size_t interrupts_size;
 
     uint8_t memory[MVM_MEMORY_CAPACITY];
 
     bool halt;
 };
 
-void mvm_pushNative(MVM* mvm, MvmNative);
+void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
+void mvm_dumpMemory(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level);
@@ -178,13 +185,13 @@ ExeptionState mvm_execInst(MVM* mvm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 ////////////////////////////////////////////
-ExeptionState native_alloc(MVM* mvm);
-ExeptionState native_free (MVM* mvm);
-ExeptionState native_print_char (MVM* mvm);
-ExeptionState native_print_f64 (MVM* mvm);
-ExeptionState native_print_i64 (MVM* mvm);
-ExeptionState native_print_u64(MVM* mvm);
-ExeptionState native_print_ptr(MVM* mvm);
+ExeptionState interrupt_ALLOC(MVM* mvm);
+ExeptionState interrupt_FREE (MVM* mvm);
+ExeptionState interrupt_PRINTchar (MVM* mvm);
+ExeptionState interrupt_PRINTf64 (MVM* mvm);
+ExeptionState interrupt_PRINTi64 (MVM* mvm);
+ExeptionState interrupt_PRINTu64(MVM* mvm);
+ExeptionState interrupt_PRINTptr(MVM* mvm);
 ////////////////////////////////////////////
 
 
@@ -265,13 +272,14 @@ bool sv_eq(StringView a, StringView b)
 const char* exeption_as_cstr(ExeptionState exeption)
 {
     switch (exeption) {
-        case EXEPTION_SATE_OK:             return "EXEPTION_STATE_OK";
-        case EXEPTION_STACK_OVERFLOW:      return "EXEPTION_STACK_OVERFLOW";
-        case EXEPTION_STACK_UNDERFLOW:     return "EXEPTION_STACK_UNDERFLOW";
-        case EXEPTION_DIV_BY_ZERO:         return "EXEPTION_DIV_BY_ZERO";
-        case EXEPTION_ILLEGAL_INST:        return "EXEPTION_ILLEGAL_INST";
-        case EXEPTION_ILLEGAL_INST_ACCESS: return "EXEPTION_ILLEGAL_INST_ACCESS";
-        case EXEPTION_ILLEGAL_OPERAND:     return "EXEPTION_ILLEGAL_OPERAND";
+        case EXEPTION_SATE_OK:                 return "EXEPTION_STATE_OK";
+        case EXEPTION_STACK_OVERFLOW:          return "EXEPTION_STACK_OVERFLOW";
+        case EXEPTION_STACK_UNDERFLOW:         return "EXEPTION_STACK_UNDERFLOW";
+        case EXEPTION_DIV_BY_ZERO:             return "EXEPTION_DIV_BY_ZERO";
+        case EXEPTION_ILLEGAL_INST:            return "EXEPTION_ILLEGAL_INST";
+        case EXEPTION_ILLEGAL_INST_ACCESS:     return "EXEPTION_ILLEGAL_INST_ACCESS";
+        case EXEPTION_ILLEGAL_OPERAND:         return "EXEPTION_ILLEGAL_OPERAND";
+        case EXEPTION_MEMORY_ACCESS_VIOLATION: return "EXEPTION_MEMORY_ACCESS_VIOLATION";
         default:
             assert(0 && "exeption_as_cstr: Unreachable");
     }
@@ -284,35 +292,45 @@ const char* exeption_as_cstr(ExeptionState exeption)
 const char* InstName(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:    return "nop";
-        case INST_PUSH:   return "push";
-        case INST_DUP:    return "dup";
-        case INST_SWAP:   return "swap";
-        case INST_DROP:   return "drop";
-        case INST_PLUSI:  return "plusi";
-        case INST_MINUSI: return "minusi";
-        case INST_MULTI:  return "multi";
-        case INST_DIVI:   return "divi";
-        case INST_PLUSF:  return "plusf";
-        case INST_MINUSF: return "minusf";
-        case INST_MULTF:  return "multf";
-        case INST_DIVF:   return "divf";
-        case INST_ANDB:   return "andb";
-        case INST_ORB:    return "orb";
-        case INST_XOR:    return "xor";
-        case INST_NOTB:   return "notb";
-        case INST_SHR:    return "shr";
-        case INST_SHL:    return "shl";
-        case INST_JMP:    return "jmp";
-        case INST_JMPIF:  return "jmpif";
-        case INST_CALL:   return "call";
-        case INST_INT:    return "int";
-        case INST_RET:    return "ret";
-        case INST_EQ:     return "equal";
-        case INST_NOT:    return "not";
-        case INST_GEF:    return "geeqf";
-        case INST_GEI:    return "geeqi";
-        case INST_HALT:   return "hlt";
+        case INST_NOP:     return "nop";
+        case INST_PUSH:    return "push";
+        case INST_DUP:     return "dup";
+        case INST_SWAP:    return "swap";
+        case INST_DROP:    return "drop";
+        case INST_PLUSI:   return "plusi";
+        case INST_MINUSI:  return "minusi";
+        case INST_MULTI:   return "multi";
+        case INST_DIVI:    return "divi";
+        case INST_PLUSF:   return "plusf";
+        case INST_MINUSF:  return "minusf";
+        case INST_MULTF:   return "multf";
+        case INST_DIVF:    return "divf";
+        case INST_ANDB:    return "andb";
+        case INST_ORB:     return "orb";
+        case INST_XOR:     return "xor";
+        case INST_NOTB:    return "notb";
+        case INST_SHR:     return "shr";
+        case INST_SHL:     return "shl";
+        case INST_JMP:     return "jmp";
+        case INST_JMPIF:   return "jmpif";
+        case INST_CALL:    return "call";
+        case INST_INT:     return "int";
+        case INST_RET:     return "ret";
+        case INST_EQ:      return "equal";
+        case INST_NOT:     return "not";
+        case INST_GEF:     return "geeqf";
+        case INST_GEI:     return "geeqi";
+        case INST_LEF:     return "leeqf";
+        case INST_LEI:     return "leeqi";
+        case INST_HALT:    return "hlt";
+        case INST_READ8:   return "read8";
+        case INST_READ16:  return "read16";
+        case INST_READ32:  return "read32";
+        case INST_READ64:  return "read64";
+        case INST_WRITE8:  return "write8";
+        case INST_WRITE16: return "write16";
+        case INST_WRITE32: return "write32";
+        case INST_WRITE64: return "write64";
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstName: Unreachable");
@@ -335,35 +353,45 @@ bool GetInstName(StringView name, InstType* out)
 bool InstHasOperand(InstType instType)
 {
     switch (instType) {
-        case INST_NOP:    return false;
-        case INST_PUSH:   return true;
-        case INST_DUP:    return true;
-        case INST_SWAP:   return true;
-        case INST_DROP:   return false;
-        case INST_PLUSI:  return false;
-        case INST_MINUSI: return false;
-        case INST_MULTI:  return false;
-        case INST_DIVI:   return false;
-        case INST_ANDB:   return false;
-        case INST_ORB:    return false;
-        case INST_XOR:    return false;
-        case INST_NOTB:   return false;
-        case INST_SHR:    return false;
-        case INST_SHL:    return false;
-        case INST_PLUSF:  return false;
-        case INST_MINUSF: return false;
-        case INST_MULTF:  return false;
-        case INST_DIVF:   return false;
-        case INST_JMP:    return true;
-        case INST_JMPIF:  return true;
-        case INST_CALL:   return true;
-        case INST_INT:    return true;
-        case INST_RET:    return false;
-        case INST_EQ:     return false;
-        case INST_NOT:    return false;
-        case INST_GEF:    return false;
-        case INST_GEI:    return false;
-        case INST_HALT:   return false;
+        case INST_NOP:     return false;
+        case INST_PUSH:    return true;
+        case INST_DUP:     return true;
+        case INST_SWAP:    return true;
+        case INST_DROP:    return false;
+        case INST_PLUSI:   return false;
+        case INST_MINUSI:  return false;
+        case INST_MULTI:   return false;
+        case INST_DIVI:    return false;
+        case INST_ANDB:    return false;
+        case INST_ORB:     return false;
+        case INST_XOR:     return false;
+        case INST_NOTB:    return false;
+        case INST_SHR:     return false;
+        case INST_SHL:     return false;
+        case INST_PLUSF:   return false;
+        case INST_MINUSF:  return false;
+        case INST_MULTF:   return false;
+        case INST_DIVF:    return false;
+        case INST_JMP:     return true;
+        case INST_JMPIF:   return true;
+        case INST_CALL:    return true;
+        case INST_INT:     return true;
+        case INST_RET:     return false;
+        case INST_EQ:      return false;
+        case INST_NOT:     return false;
+        case INST_GEF:     return false;
+        case INST_GEI:     return false;
+        case INST_LEF:     return false;
+        case INST_LEI:     return false;
+        case INST_HALT:    return false;
+        case INST_READ8:   return false;
+        case INST_READ16:  return false;
+        case INST_READ32:  return false;
+        case INST_READ64:  return false;
+        case INST_WRITE8:  return false;
+        case INST_WRITE16: return false;
+        case INST_WRITE32: return false;
+        case INST_WRITE64: return false;
         case NUMBER_OF_INSTS:
         default:
             assert(0 && "InstHasOperand: Unreachable");
@@ -374,11 +402,11 @@ bool InstHasOperand(InstType instType)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void* masm_alloc(Masm* masm, size_t size)
+void* masm_tmpAlloc(Masm* masm, size_t size)
 {
-    assert(masm->memory_size + size <= MASM_MEMORY_CAPACITY);
-    void* ptr = masm->memory + masm->memory_size;
-    masm->memory_size += size;
+    assert(masm->tmp_memory_size + size <= MASM_TMP_MEMORY_CAPACITY);
+    void* ptr = masm->tmp_memory + masm->tmp_memory_size;
+    masm->tmp_memory_size += size;
     return ptr;
 }
 
@@ -415,7 +443,7 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 
 StringView masm_slurpFile(Masm* masm, StringView filePath)
 {
-    char* filePath_cstr = masm_alloc(masm, filePath.count + 1);
+    char* filePath_cstr = masm_tmpAlloc(masm, filePath.count + 1);
     if (filePath_cstr == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file-path! : %s\n", strerror(errno));
         exit(1);
@@ -440,7 +468,7 @@ StringView masm_slurpFile(Masm* masm, StringView filePath)
         exit(1);
     }
 
-    char* buffer = masm_alloc(masm, m);
+    char* buffer = masm_tmpAlloc(masm, (size_t)m);
     if (buffer == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file! : %s\n", strerror(errno));
         exit(1);
@@ -451,7 +479,7 @@ StringView masm_slurpFile(Masm* masm, StringView filePath)
         exit(1);
     }
 
-    size_t n = fread(buffer, 1, m, f);
+    size_t n = fread(buffer, 1, (size_t)m, f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath_cstr, strerror(errno));
         exit(1);
@@ -488,10 +516,10 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void mvm_pushNative(MVM* mvm, MvmNative native)
+void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt)
 {
-    assert(mvm->natives_size < MVM_NATIVES_CAPACITY);
-    mvm->natives[mvm->natives_size++] = native;
+    assert(mvm->interrupts_size < MVM_NATIVES_CAPACITY);
+    mvm->interrupts[mvm->interrupts_size++] = interrupt;
 }
 
 void mvm_dumpStack(FILE *stream, const MVM* mvm)
@@ -512,6 +540,15 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
     } else {
         fprintf(stream, " [empty]\n");
     }
+}
+
+void mvm_dumpMemory(FILE *stream, const MVM* mvm)
+{
+    fprintf(stream, "MEMORY:\n  ");
+    for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
+        fprintf(stream, "%02x ", mvm->memory[i]);
+    }
+    fprintf(stream, "\n");
 }
 
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path)
@@ -550,7 +587,7 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
         exit(1);
     }
 
-    assert(m % sizeof(mvm->program[0]) == 0);
+    assert((size_t)m % sizeof(mvm->program[0]) == 0);
     assert((size_t) m <= MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0]));
 
     if (fseek(f, 0, SEEK_SET) < 0) {
@@ -558,12 +595,12 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
         exit(1);
     }
 
-    size_t size = fread(mvm->program, sizeof(mvm->program[0]), m / sizeof(mvm->program[0]), f);
+    size_t size = fread(mvm->program, sizeof(mvm->program[0]), (size_t)m / sizeof(mvm->program[0]), f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
         exit(1);
     }
-    mvm->program_size = (int)size;
+    mvm->program_size = (uint64_t)size;
 
     fclose(f);
 }
@@ -917,10 +954,10 @@ ExeptionState mvm_execInst(MVM* mvm)
         }
 
         case INST_INT: {
-            if (inst.operand.as_u64 > mvm->natives_size) {
+            if (inst.operand.as_u64 > mvm->interrupts_size) {
                 return EXEPTION_ILLEGAL_OPERAND;
             }
-            mvm->natives[inst.operand.as_u64](mvm);
+            mvm->interrupts[inst.operand.as_u64](mvm);
             mvm->ip += 1;
             break;
         }
@@ -972,8 +1009,136 @@ ExeptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = (mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 >= mvm->stack[mvm->stack_size - 2].as_i64);
             mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_LEF: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 <= mvm->stack[mvm->stack_size - 2].as_f64);
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_LEI: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 <= mvm->stack[mvm->stack_size - 2].as_i64);
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_READ8: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            mvm->stack[mvm->stack_size - 1].as_u64 = mvm->memory[addr];
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_READ16: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 1) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint16_t*)&mvm->memory[addr];
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_READ32: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 3) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint32_t*)&mvm->memory[addr];
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_READ64: {
+            if (mvm->stack_size < 1) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 7) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint64_t*)&mvm->memory[addr];
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_WRITE8: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            mvm->memory[addr] = (uint8_t)mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 2;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_WRITE16: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 1) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            *(uint16_t*)&mvm->memory[addr] = (uint16_t)mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 2;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_WRITE32: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 3) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            *(uint32_t*)&mvm->memory[addr] = (uint32_t)mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 2;
+            mvm->ip += 1;
+            break;
+        }
+
+        case INST_WRITE64: {
+            if (mvm->stack_size < 2) {
+                return EXEPTION_STACK_UNDERFLOW;
+            }
+            const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+            if (addr >= MVM_MEMORY_CAPACITY - 7) {
+                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+            }
+            *(uint64_t*)&mvm->memory[addr] = (uint64_t)mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 2;
             mvm->ip += 1;
             break;
         }
@@ -1004,7 +1169,7 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ExeptionState native_alloc(MVM* mvm)
+ExeptionState interrupt_ALLOC(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1014,7 +1179,7 @@ ExeptionState native_alloc(MVM* mvm)
     return EXEPTION_SATE_OK;
 }
 
-ExeptionState native_free(MVM* mvm)
+ExeptionState interrupt_FREE(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1025,7 +1190,7 @@ ExeptionState native_free(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_print_char(MVM* mvm)
+ExeptionState interrupt_PRINTchar(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1040,7 +1205,7 @@ ExeptionState native_print_char(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_print_f64(MVM* mvm)
+ExeptionState interrupt_PRINTf64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1051,7 +1216,7 @@ ExeptionState native_print_f64(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_print_i64(MVM* mvm)
+ExeptionState interrupt_PRINTi64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1062,7 +1227,7 @@ ExeptionState native_print_i64(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_print_u64(MVM* mvm)
+ExeptionState interrupt_PRINTu64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;
@@ -1073,7 +1238,7 @@ ExeptionState native_print_u64(MVM* mvm)
     return  EXEPTION_SATE_OK;
 }
 
-ExeptionState native_print_ptr(MVM* mvm)
+ExeptionState interrupt_PRINTptr(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXEPTION_STACK_UNDERFLOW;

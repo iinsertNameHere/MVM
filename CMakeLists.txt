@@ -3,7 +3,7 @@ project(slick)
 
 set(CMAKE_C_STANDARD 11)
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -Wswitch-enum -Wmissing-prototypes -std=c11 -pedantic ${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS "-Wall -Wextra -Wswitch-enum -Wmissing-prototypes -Wconversion -std=c11 -pedantic -fno-strict-aliasing ${CMAKE_C_FLAGS}")
 
 
 add_executable(mvm src/mvm/mvm.c)
