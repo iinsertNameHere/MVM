@@ -26,8 +26,8 @@
 #define MVM_STACK_CAPACITY 942 //TODO: Fix stack-underflow if lager than 942.
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
-//#define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
-#define MVM_MEMORY_CAPACITY 20
+#define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
+//#define MVM_MEMORY_CAPACITY 20
 
 typedef enum {false, true} bool;
 
@@ -185,13 +185,14 @@ ExeptionState mvm_execInst(MVM* mvm);
 ExeptionState mvm_execProgram(MVM* mvm, int limit);
 
 ////////////////////////////////////////////
-ExeptionState interrupt_ALLOC(MVM* mvm);
-ExeptionState interrupt_FREE (MVM* mvm);
 ExeptionState interrupt_PRINTchar (MVM* mvm);
 ExeptionState interrupt_PRINTf64 (MVM* mvm);
 ExeptionState interrupt_PRINTi64 (MVM* mvm);
 ExeptionState interrupt_PRINTu64(MVM* mvm);
 ExeptionState interrupt_PRINTptr(MVM* mvm);
+ExeptionState interrupt_ALLOC(MVM* mvm);
+ExeptionState interrupt_FREE (MVM* mvm);
+ExeptionState interrupt_DUMPMEM (MVM* mvm);
 ////////////////////////////////////////////
 
 
@@ -546,7 +547,7 @@ void mvm_dumpMemory(FILE *stream, const MVM* mvm)
 {
     fprintf(stream, "MEMORY:\n  ");
     for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
-        fprintf(stream, "%02x ", mvm->memory[i]);
+        fprintf(stream, "%02X ", mvm->memory[i]);
     }
     fprintf(stream, "\n");
 }
@@ -1169,27 +1170,6 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ExeptionState interrupt_ALLOC(MVM* mvm)
-{
-    if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
-    }
-
-    mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
-    return EXEPTION_SATE_OK;
-}
-
-ExeptionState interrupt_FREE(MVM* mvm)
-{
-    if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
-    }
-
-    free(mvm->stack[mvm->stack_size - 1].as_ptr);
-    mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
-}
-
 ExeptionState interrupt_PRINTchar(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
@@ -1247,6 +1227,51 @@ ExeptionState interrupt_PRINTptr(MVM* mvm)
     printf("0x%llx", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
     mvm->stack_size -= 1;
     return  EXEPTION_SATE_OK;
+}
+
+ExeptionState interrupt_ALLOC(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
+    return EXEPTION_SATE_OK;
+}
+
+ExeptionState interrupt_FREE(MVM* mvm)
+{
+    if (mvm->stack_size < 1) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    free(mvm->stack[mvm->stack_size - 1].as_ptr);
+    mvm->stack_size -= 1;
+    return  EXEPTION_SATE_OK;
+}
+
+ExeptionState interrupt_DUMPMEM (MVM* mvm)
+{
+    if (mvm->stack_size < 2) {
+        return EXEPTION_STACK_UNDERFLOW;
+    }
+
+    MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+    uint64_t size = mvm->stack[mvm->stack_size - 1].as_u64;
+
+    if (addr >= MVM_MEMORY_CAPACITY
+    || addr + size < addr
+    || addr + size >= MVM_MEMORY_CAPACITY) {
+        return EXEPTION_MEMORY_ACCESS_VIOLATION;
+    }
+
+    for (uint64_t i = addr; i < size; ++i) {
+        printf("%02X ", mvm->memory[addr + i]);
+    }
+    printf("\n");
+
+    mvm->stack_size -= 2;
+    return EXEPTION_SATE_OK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

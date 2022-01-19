@@ -1,6 +1,6 @@
 %include "../msmlib/stdlib.mlb"
 
-%define N 16
+%define N 32
 
 jmp main
 
@@ -37,4 +37,8 @@ fillmem_loop:
 main:
     push N
     call fillmem
+
+    push 0
+    push N
+    int mem_dump
     hlt

@@ -85,13 +85,14 @@ int main(int argc, char** argv)
     mvm_pushInterrupt(&mvm, interrupt_PRINTptr);  // 4
     mvm_pushInterrupt(&mvm, interrupt_ALLOC);     // 5
     mvm_pushInterrupt(&mvm, interrupt_FREE);      // 6
+    mvm_pushInterrupt(&mvm, interrupt_DUMPMEM);   // 7
 
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {
         ExeptionState state = mvm_execProgram(&mvm, limit);
         if (state != EXEPTION_STACK_OVERFLOW && debugPrint) {
             mvm_dumpStack(stdout, &mvm);
-            mvm_dumpMemory(stdout, &mvm);
+            //mvm_dumpMemory(stdout, &mvm);
         } else if (state != EXEPTION_SATE_OK) {
             fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(state));
             return 1;
@@ -122,7 +123,7 @@ int main(int argc, char** argv)
             }
             printf("\n");
             mvm_dumpStack(stdout, &mvm);
-            mvm_dumpMemory(stdout, &mvm);
+            //mvm_dumpMemory(stdout, &mvm);
             printf("\nPress enter to execute the next instruction...\n");
             getchar();
         }

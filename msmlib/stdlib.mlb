@@ -6,6 +6,7 @@
 %define print_ptr  4
 %define alloc      5
 %define free       6
+%define mem_dump   7
 ;; ----------------- ;;
 
 %define NL 13 ; define new-line ascii code
