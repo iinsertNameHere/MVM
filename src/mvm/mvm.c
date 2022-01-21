@@ -90,10 +90,10 @@ int main(int argc, char** argv)
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {
         ExeptionState state = mvm_execProgram(&mvm, limit);
-        if (state != EXEPTION_STACK_OVERFLOW && debugPrint) {
+        if (state != EXCEPTION_STACK_OVERFLOW && debugPrint) {
             mvm_dumpStack(stdout, &mvm);
             //mvm_dumpMemory(stdout, &mvm);
-        } else if (state != EXEPTION_SATE_OK) {
+        } else if (state != EXCEPTION_SATE_OK) {
             fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(state));
             return 1;
         }
@@ -111,10 +111,10 @@ int main(int argc, char** argv)
             }
             ExeptionState err = mvm_execInst(&mvm);
             if (mvm.stack_size > MVM_STACK_CAPACITY) {
-                fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(EXEPTION_STACK_OVERFLOW));
+                fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(EXCEPTION_STACK_OVERFLOW));
                 exit(1);
             }
-            if (err != EXEPTION_SATE_OK) {
+            if (err != EXCEPTION_SATE_OK) {
                 fprintf(stderr, "ERROR: Failed to execute program! : %s\n", exeption_as_cstr(err));
                 exit(1);
             }
