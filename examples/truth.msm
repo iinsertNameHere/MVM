@@ -6,7 +6,7 @@ jmp main
 ; Truth value (can only be 1 or 0)
 ; 1 = True
 ; 0 = False
-%define T 1
+%define T 0
 
 truth:
     swap 1 ; Swap return addr to the bottom of the stack
