@@ -14,7 +14,7 @@
 #include <inttypes.h>
 
 #define PRIsv ".*s"
-#define SV_FORMAT(sv) (int) sv.count, sv.data
+#define SV_FORMAT(sv) (int) (sv).count, (sv).data
 
 #define MASM_LABEL_CAPACITY 1024
 #define MASM_DEFERRED_OPERANDS_CAPACITY 1024
@@ -38,7 +38,7 @@ typedef union {
     void* as_ptr;
 } Word;
 
-static_assert(sizeof(Word) == 8, "The MVM's Word is expected to be 64 bits!");
+static_assert(sizeof(Word) == 8, "The MVMs Word is expected to be 64 bits!");
 
 typedef struct {
     size_t count;
@@ -61,9 +61,9 @@ typedef enum {
     EXCEPTION_ILLEGAL_INST_ACCESS,
     EXCEPTION_ILLEGAL_OPERAND,
     EXCEPTION_MEMORY_ACCESS_VIOLATION,
-} ExeptionState;
+} ExceptionState;
 
-const char* exeption_as_cstr(ExeptionState exeption);
+const char* exception_as_cstr(ExceptionState exception);
 
 typedef uint64_t InstAddr;
 
@@ -141,7 +141,7 @@ typedef uint64_t MemoryAddr;
 
 typedef struct {
     Label labels[MASM_LABEL_CAPACITY];
-    size_t lables_size;
+    size_t labels_size;
     DeferredOperand deferredOperands[MASM_DEFERRED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
     char tmp_memory[MASM_TMP_MEMORY_CAPACITY];
@@ -157,7 +157,7 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out);
 
 typedef struct MVM MVM;
 
-typedef ExeptionState (*MvmInterrupt)(MVM*);
+typedef ExceptionState (*MvmInterrupt)(MVM*);
 
 struct MVM {
     Word stack[MVM_STACK_CAPACITY];
@@ -177,22 +177,22 @@ struct MVM {
 
 void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
-void mvm_dumpMemory(FILE *stream, const MVM* mvm);
+// void mvm_dumpMemory(FILE *stream, const MVM* mvm);
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
 void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
 void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level);
-ExeptionState mvm_execInst(MVM* mvm);
-ExeptionState mvm_execProgram(MVM* mvm, int limit);
+ExceptionState mvm_execInst(MVM* mvm);
+ExceptionState mvm_execProgram(MVM* mvm, int limit);
 
 ////////////////////////////////////////////
-ExeptionState interrupt_PRINTchar (MVM* mvm);
-ExeptionState interrupt_PRINTf64 (MVM* mvm);
-ExeptionState interrupt_PRINTi64 (MVM* mvm);
-ExeptionState interrupt_PRINTu64(MVM* mvm);
-ExeptionState interrupt_PRINTptr(MVM* mvm);
-ExeptionState interrupt_ALLOC(MVM* mvm);
-ExeptionState interrupt_FREE (MVM* mvm);
-ExeptionState interrupt_DUMPMEM (MVM* mvm);
+ExceptionState interrupt_PRINTchar (MVM* mvm);
+ExceptionState interrupt_PRINTf64 (MVM* mvm);
+ExceptionState interrupt_PRINTi64 (MVM* mvm);
+ExceptionState interrupt_PRINTu64(MVM* mvm);
+ExceptionState interrupt_PRINTptr(MVM* mvm);
+ExceptionState interrupt_ALLOC(MVM* mvm);
+ExceptionState interrupt_FREE (MVM* mvm);
+ExceptionState interrupt_DUMPMEM (MVM* mvm);
 ////////////////////////////////////////////
 
 
@@ -270,9 +270,9 @@ bool sv_eq(StringView a, StringView b)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const char* exeption_as_cstr(ExeptionState exeption)
+const char* exception_as_cstr(ExceptionState exception)
 {
-    switch (exeption) {
+    switch (exception) {
         case EXCEPTION_SATE_OK:                 return "EXCEPTION_STATE_OK";
         case EXCEPTION_STACK_OVERFLOW:          return "EXCEPTION_STACK_OVERFLOW";
         case EXCEPTION_STACK_UNDERFLOW:         return "EXCEPTION_STACK_UNDERFLOW";
@@ -413,7 +413,7 @@ void* masm_tmpAlloc(Masm* masm, size_t size)
 
 bool masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 {
-    for (size_t i = 0; i < masm->lables_size; ++i) {
+    for (size_t i = 0; i < masm->labels_size; ++i) {
         if (sv_eq(masm->labels[i].name, name)) {
             *out = masm->labels[i].word;
             return true;
@@ -424,12 +424,12 @@ bool masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 
 bool masm_bindLabel(Masm* masm, StringView name, Word word)
 {
-    if (masm->lables_size >= MASM_LABEL_CAPACITY) {
+    if (masm->labels_size >= MASM_LABEL_CAPACITY) {
         return false;
     }
     Word ignore =  {0};
     if (!masm_resolveLabel(masm, name, &ignore)) {
-        masm->labels[masm->lables_size++] = (Label) {.name = name, .word = word};
+        masm->labels[masm->labels_size++] = (Label) {.name = name, .word = word};
         return true;
     }
     return false;
@@ -553,14 +553,14 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
     }
 }
 
-void mvm_dumpMemory(FILE *stream, const MVM* mvm)
-{
-    fprintf(stream, "MEMORY:\n  ");
-    for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
-        fprintf(stream, "%02X ", mvm->memory[i]);
-    }
-    fprintf(stream, "\n");
-}
+// void mvm_dumpMemory(FILE *stream, const MVM* mvm)
+// {
+//     fprintf(stream, "MEMORY:\n  ");
+//     for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
+//         fprintf(stream, "%02X ", mvm->memory[i]);
+//     }
+//     fprintf(stream, "\n");
+// }
 
 void mvm_saveProgramToFile(const MVM* mvm, const char* file_path)
 {
@@ -744,7 +744,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
     }
 }
 
-ExeptionState mvm_execInst(MVM* mvm)
+ExceptionState mvm_execInst(MVM* mvm)
 {
     if (mvm->ip >= mvm->program_size) {
         return EXCEPTION_ILLEGAL_INST_ACCESS;
@@ -1170,10 +1170,10 @@ ExeptionState mvm_execInst(MVM* mvm)
     return EXCEPTION_SATE_OK;
 }
 
-ExeptionState mvm_execProgram(MVM* mvm, int limit)
+ExceptionState mvm_execProgram(MVM* mvm, int limit)
 {
     while (limit != 0 && !mvm->halt) {
-        ExeptionState err = mvm_execInst(mvm);
+        ExceptionState err = mvm_execInst(mvm);
         if (mvm->stack_size > MVM_STACK_CAPACITY) {
             return EXCEPTION_STACK_OVERFLOW;
         }
@@ -1189,7 +1189,7 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ExeptionState interrupt_PRINTchar(MVM* mvm)
+ExceptionState interrupt_PRINTchar(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1204,7 +1204,7 @@ ExeptionState interrupt_PRINTchar(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_PRINTf64(MVM* mvm)
+ExceptionState interrupt_PRINTf64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1215,7 +1215,7 @@ ExeptionState interrupt_PRINTf64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_PRINTi64(MVM* mvm)
+ExceptionState interrupt_PRINTi64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1226,7 +1226,7 @@ ExeptionState interrupt_PRINTi64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_PRINTu64(MVM* mvm)
+ExceptionState interrupt_PRINTu64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1237,7 +1237,7 @@ ExeptionState interrupt_PRINTu64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_PRINTptr(MVM* mvm)
+ExceptionState interrupt_PRINTptr(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1248,7 +1248,7 @@ ExeptionState interrupt_PRINTptr(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_ALLOC(MVM* mvm)
+ExceptionState interrupt_ALLOC(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1258,7 +1258,7 @@ ExeptionState interrupt_ALLOC(MVM* mvm)
     return EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_FREE(MVM* mvm)
+ExceptionState interrupt_FREE(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1269,7 +1269,7 @@ ExeptionState interrupt_FREE(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExeptionState interrupt_DUMPMEM (MVM* mvm)
+ExceptionState interrupt_DUMPMEM (MVM* mvm)
 {
     if (mvm->stack_size < 2) {
         return EXCEPTION_STACK_UNDERFLOW;
