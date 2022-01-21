@@ -53,14 +53,14 @@ StringView sv_chopByDelim(StringView* sv, char delim);
 bool sv_eq(StringView a, StringView b);
 
 typedef enum {
-    EXEPTION_SATE_OK = 0,
-    EXEPTION_STACK_OVERFLOW,
-    EXEPTION_STACK_UNDERFLOW,
-    EXEPTION_DIV_BY_ZERO,
-    EXEPTION_ILLEGAL_INST,
-    EXEPTION_ILLEGAL_INST_ACCESS,
-    EXEPTION_ILLEGAL_OPERAND,
-    EXEPTION_MEMORY_ACCESS_VIOLATION,
+    EXCEPTION_SATE_OK = 0,
+    EXCEPTION_STACK_OVERFLOW,
+    EXCEPTION_STACK_UNDERFLOW,
+    EXCEPTION_DIV_BY_ZERO,
+    EXCEPTION_ILLEGAL_INST,
+    EXCEPTION_ILLEGAL_INST_ACCESS,
+    EXCEPTION_ILLEGAL_OPERAND,
+    EXCEPTION_MEMORY_ACCESS_VIOLATION,
 } ExeptionState;
 
 const char* exeption_as_cstr(ExeptionState exeption);
@@ -273,19 +273,18 @@ bool sv_eq(StringView a, StringView b)
 const char* exeption_as_cstr(ExeptionState exeption)
 {
     switch (exeption) {
-        case EXEPTION_SATE_OK:                 return "EXEPTION_STATE_OK";
-        case EXEPTION_STACK_OVERFLOW:          return "EXEPTION_STACK_OVERFLOW";
-        case EXEPTION_STACK_UNDERFLOW:         return "EXEPTION_STACK_UNDERFLOW";
-        case EXEPTION_DIV_BY_ZERO:             return "EXEPTION_DIV_BY_ZERO";
-        case EXEPTION_ILLEGAL_INST:            return "EXEPTION_ILLEGAL_INST";
-        case EXEPTION_ILLEGAL_INST_ACCESS:     return "EXEPTION_ILLEGAL_INST_ACCESS";
-        case EXEPTION_ILLEGAL_OPERAND:         return "EXEPTION_ILLEGAL_OPERAND";
-        case EXEPTION_MEMORY_ACCESS_VIOLATION: return "EXEPTION_MEMORY_ACCESS_VIOLATION";
+        case EXCEPTION_SATE_OK:                 return "EXCEPTION_STATE_OK";
+        case EXCEPTION_STACK_OVERFLOW:          return "EXCEPTION_STACK_OVERFLOW";
+        case EXCEPTION_STACK_UNDERFLOW:         return "EXCEPTION_STACK_UNDERFLOW";
+        case EXCEPTION_DIV_BY_ZERO:             return "EXCEPTION_DIV_BY_ZERO";
+        case EXCEPTION_ILLEGAL_INST:            return "EXCEPTION_ILLEGAL_INST";
+        case EXCEPTION_ILLEGAL_INST_ACCESS:     return "EXCEPTION_ILLEGAL_INST_ACCESS";
+        case EXCEPTION_ILLEGAL_OPERAND:         return "EXCEPTION_ILLEGAL_OPERAND";
+        case EXCEPTION_MEMORY_ACCESS_VIOLATION: return "EXCEPTION_MEMORY_ACCESS_VIOLATION";
         default:
-            assert(0 && "exeption_as_cstr: Unreachable");
+            fprintf(stderr, "ERROR: Encountered unknown Exception type!");
+            exit(1);
     }
-    assert(0 && "exeption_as_cstr: Unreachable");
-    return "";
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -334,10 +333,9 @@ const char* InstName(InstType instType)
         case INST_WRITE64: return "write64";
         case NUMBER_OF_INSTS:
         default:
-            assert(0 && "InstName: Unreachable");
+            fprintf(stderr, "ERROR: Encountered unknown instruction!");
+            exit(1);
     }
-    assert(0 && "InstName: Unreachable");
-    return "";
 }
 
 bool GetInstName(StringView name, InstType* out)
@@ -395,17 +393,19 @@ bool InstHasOperand(InstType instType)
         case INST_WRITE64: return false;
         case NUMBER_OF_INSTS:
         default:
-            assert(0 && "InstHasOperand: Unreachable");
+            fprintf(stderr, "ERROR: Encountered unknown instruction!");
+            exit(1);
     }
-    assert(0 && "InstHasOperand: Unreachable");
-    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void* masm_tmpAlloc(Masm* masm, size_t size)
 {
-    assert(masm->tmp_memory_size + size <= MASM_TMP_MEMORY_CAPACITY);
+    if (masm->tmp_memory_size + size > MASM_TMP_MEMORY_CAPACITY) {
+        fprintf(stderr, "ERROR: Linear allocation failed!");
+        exit(1);
+    }
     void* ptr = masm->tmp_memory + masm->tmp_memory_size;
     masm->tmp_memory_size += size;
     return ptr;
@@ -424,7 +424,9 @@ bool masm_resolveLabel(const Masm* masm, StringView name, Word* out)
 
 bool masm_bindLabel(Masm* masm, StringView name, Word word)
 {
-    assert(masm->lables_size < MASM_LABEL_CAPACITY);
+    if (masm->lables_size >= MASM_LABEL_CAPACITY) {
+        return false;
+    }
     Word ignore =  {0};
     if (!masm_resolveLabel(masm, name, &ignore)) {
         masm->labels[masm->lables_size++] = (Label) {.name = name, .word = word};
@@ -435,7 +437,10 @@ bool masm_bindLabel(Masm* masm, StringView name, Word word)
 
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 {
-    assert(masm->deferredOperands_size < MASM_DEFERRED_OPERANDS_CAPACITY);
+    if (masm->deferredOperands_size >= MASM_DEFERRED_OPERANDS_CAPACITY) {
+        fprintf(stderr, "ERROR: DEFERRED_OPERANDS Buffer overflow!");
+        exit(1);
+    }
     masm->deferredOperands[masm->deferredOperands_size++] = (DeferredOperand) {
             .addr = addr,
             .label = label
@@ -496,7 +501,9 @@ StringView masm_slurpFile(Masm* masm, StringView filePath)
 
 bool masm_numberLiteral_as_Word (StringView sv, Word* out)
 {
-    assert(sv.count < 1024);
+    if (sv.count >= 1024) {
+        return false;
+    }
     char cstr[sv.count + 1];
     memcpy(cstr, sv.data, sv.count);
     cstr[sv.count] = '\0';
@@ -519,7 +526,10 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out)
 
 void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt)
 {
-    assert(mvm->interrupts_size < MVM_NATIVES_CAPACITY);
+    if (mvm->interrupts_size >= MVM_NATIVES_CAPACITY) {
+        fprintf(stderr, "ERROR: Failed to build interrupt table!");
+        exit(1);
+    }
     mvm->interrupts[mvm->interrupts_size++] = interrupt;
 }
 
@@ -588,8 +598,14 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
         exit(1);
     }
 
-    assert((size_t)m % sizeof(mvm->program[0]) == 0);
-    assert((size_t) m <= MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0]));
+    if ((size_t)m % sizeof(mvm->program[0]) != 0) {
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        exit(1);
+    }
+    if ((size_t) m > MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0])) {
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        exit(1);
+    }
 
     if (fseek(f, 0, SEEK_SET) < 0) {
         fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
@@ -615,7 +631,10 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
     // Pass one
     int lineNum = 0;
     while (source.count > 0) {
-        assert(mvm->program_size < MVM_PROGRAM_CAPACITY);
+        if (mvm->program_size >= MVM_PROGRAM_CAPACITY) {
+            fprintf(stderr, "%" PRIsv ":%d: ERROR: Program size exceeded!", SV_FORMAT(inputFile), lineNum);
+            exit(1);
+        }
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
         lineNum += 1;
         if (line.count > 0 && *line.data != MASM_COMMENT_SYMBOL) {
@@ -634,18 +653,18 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                         StringView value = sv_chopByDelim(&line, ' ');
                         Word word = {0};
                         if (!masm_numberLiteral_as_Word(value, &word)) {
-                            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is not a number!\n", SV_FORMAT(inputFile), lineNum,
-                                    (int) value.count, value.data);
+                            fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not a number!\n", SV_FORMAT(inputFile), lineNum,
+                            SV_FORMAT(value));
                             exit(1);
                         }
 
                         if (!masm_bindLabel(masm, label, word)) {
-                            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is already defined!!\n", SV_FORMAT(inputFile), lineNum,
-                                    (int) label.count, label.data);
+                            fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is already defined!!\n", SV_FORMAT(inputFile), lineNum,
+                            SV_FORMAT(label));
                             exit(1);
                         }
                     } else {
-                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Definition name expected!\n", SV_FORMAT(inputFile), lineNum);
+                        fprintf(stderr, "%" PRIsv ":%d: ERROR: Definition name expected!\n", SV_FORMAT(inputFile), lineNum);
                         exit(1);
                     }
                 } else if (sv_eq(token, cstr_as_sv("include"))) {
@@ -658,15 +677,15 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                             if (level + 1 < MASM_MAX_INCLUDES) {
                                 mvm_translateSourceFile(mvm, masm, line, level + 1);
                             } else {
-                                fprintf(stderr, "%" PRIsv ":%d: ERORR: Exceeded maximum-include-level!\n", SV_FORMAT(inputFile), lineNum);
+                                fprintf(stderr, "%" PRIsv ":%d: ERROR: Exceeded maximum-include-level!\n", SV_FORMAT(inputFile), lineNum);
                                 exit(1);
                             }
                         } else {
-                            fprintf(stderr, "%" PRIsv ":%d: ERORR: Include-Path has to be surrounded with quotation marks!\n", SV_FORMAT(inputFile), lineNum);
+                            fprintf(stderr, "%" PRIsv ":%d: ERROR: Include-Path has to be surrounded with quotation marks!\n", SV_FORMAT(inputFile), lineNum);
                             exit(1);
                         }
                     } else {
-                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Include-Path is not provided!\n", SV_FORMAT(inputFile), lineNum);
+                        fprintf(stderr, "%" PRIsv ":%d: ERROR: Include-Path is not provided!\n", SV_FORMAT(inputFile), lineNum);
                         exit(1);
                     }
                 } else {
@@ -677,7 +696,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                 if (token.count > 0 && token.data[token.count - 1] == ':') {
                     StringView label = (StringView) {.count = token.count - 1, .data = token.data};
                     if (!masm_bindLabel(masm, label, (Word) { .as_u64 = mvm->program_size })) {
-                        fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is already defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
+                        fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is already defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
                         exit(1);
                     }
                     token = sv_trim(sv_chopByDelim(&line, ' '));
@@ -691,7 +710,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                         mvm->program[mvm->program_size].type = instType;
                         if (InstHasOperand(instType)) {
                             if (operand.count == 0) {
-                                fprintf(stderr, "%" PRIsv ":%d: ERORR: instruction '%" PRIsv "' expects an operand!\n",
+                                fprintf(stderr, "%" PRIsv ":%d: ERROR: instruction '%" PRIsv "' expects an operand!\n",
                                         SV_FORMAT(inputFile), lineNum, SV_FORMAT(token));
                                 exit(1);
                             }
@@ -705,8 +724,8 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                         }
                         mvm->program_size += 1;
                     } else {
-                        fprintf(stderr, "%" PRIsv ":%d: ERORR: Unknown instruction '%" PRIsv "'!\n", SV_FORMAT(inputFile), lineNum,
-                                (int) token.count, token.data);
+                        fprintf(stderr, "%" PRIsv ":%d: ERROR: Unknown instruction '%" PRIsv "'!\n", SV_FORMAT(inputFile), lineNum,
+                        SV_FORMAT(token));
                         exit(1);
                     }
                 }
@@ -719,7 +738,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
         StringView label = masm->deferredOperands[i].label;
         Word* operand = &mvm->program[masm->deferredOperands[i].addr].operand;
         if (!masm_resolveLabel(masm, label, operand)) {
-            fprintf(stderr, "%" PRIsv ":%d: ERORR: '%" PRIsv "' is not defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
+            fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
             exit(1);
         }
     }
@@ -728,7 +747,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
 ExeptionState mvm_execInst(MVM* mvm)
 {
     if (mvm->ip >= mvm->program_size) {
-        return EXEPTION_ILLEGAL_INST_ACCESS;
+        return EXCEPTION_ILLEGAL_INST_ACCESS;
     }
 
     Inst inst = mvm->program[mvm->ip];
@@ -740,7 +759,7 @@ ExeptionState mvm_execInst(MVM* mvm)
         }
         case INST_PUSH: {
             if (mvm->stack_size >= MVM_STACK_CAPACITY) {
-                return EXEPTION_STACK_OVERFLOW;
+                return EXCEPTION_STACK_OVERFLOW;
             }
             mvm->stack[mvm->stack_size++] = inst.operand;
             mvm->ip += 1;
@@ -749,10 +768,10 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_DUP: {
             if (mvm->stack_size >= MVM_STACK_CAPACITY) {
-                return EXEPTION_STACK_OVERFLOW;
+                return EXCEPTION_STACK_OVERFLOW;
             }
             if (mvm->stack_size - inst.operand.as_u64 <= 0) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
 
             mvm->stack[mvm->stack_size] = mvm->stack[mvm->stack_size - 1 - inst.operand.as_u64];
@@ -763,7 +782,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_SWAP: {
             if (inst.operand.as_u64 >= mvm->stack_size) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const uint64_t a = mvm->stack_size - 1;
             const uint64_t b = mvm->stack_size - 1 - inst.operand.as_u64;
@@ -776,7 +795,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_DROP: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack_size -= 1;
             mvm->ip += 1;
@@ -785,7 +804,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_PLUSI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 += mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -795,7 +814,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_MINUSI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 -= mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -805,7 +824,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_MULTI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 *= mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -815,10 +834,10 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_DIVI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             if (mvm->stack[mvm->stack_size - 1].as_u64 == 0) {
-                return EXEPTION_DIV_BY_ZERO;
+                return EXCEPTION_DIV_BY_ZERO;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 /= mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -828,7 +847,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_PLUSF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_f64 += mvm->stack[mvm->stack_size - 1].as_f64;
             mvm->stack_size -= 1;
@@ -838,7 +857,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_MINUSF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_f64 -= mvm->stack[mvm->stack_size - 1].as_f64;
             mvm->stack_size -= 1;
@@ -848,7 +867,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_MULTF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_f64 *= mvm->stack[mvm->stack_size - 1].as_f64;
             mvm->stack_size -= 1;
@@ -858,7 +877,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_DIVF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
 
             mvm->stack[mvm->stack_size - 2].as_f64 /= mvm->stack[mvm->stack_size - 1].as_f64 ;
@@ -869,7 +888,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_ANDB: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 & mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -879,7 +898,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_ORB: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 | mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -889,7 +908,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_XOR: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 ^ mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -899,7 +918,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_NOTB: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = ~mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -909,7 +928,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_SHR: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -919,7 +938,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_SHL: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 << mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -934,7 +953,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_JMPIF: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             if (mvm->stack[mvm->stack_size - 1].as_u64) {
                 mvm->ip = inst.operand.as_u64;
@@ -947,7 +966,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_CALL: {
             if (mvm->stack_size >= MVM_STACK_CAPACITY) {
-                return EXEPTION_STACK_OVERFLOW;
+                return EXCEPTION_STACK_OVERFLOW;
             }
             mvm->stack[mvm->stack_size++].as_u64 = mvm->ip + 1;
             mvm->ip = inst.operand.as_u64;
@@ -956,7 +975,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_INT: {
             if (inst.operand.as_u64 > mvm->interrupts_size) {
-                return EXEPTION_ILLEGAL_OPERAND;
+                return EXCEPTION_ILLEGAL_OPERAND;
             }
             mvm->interrupts[inst.operand.as_u64](mvm);
             mvm->ip += 1;
@@ -965,7 +984,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_RET: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->ip = mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 1;
@@ -979,7 +998,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_EQ: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_u64 = (mvm->stack[mvm->stack_size - 1].as_u64 == mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
@@ -989,7 +1008,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_NOT: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = !mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->ip += 1;
@@ -998,7 +1017,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_GEF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 >= mvm->stack[mvm->stack_size - 2].as_f64);
             mvm->stack_size -= 1;
@@ -1008,7 +1027,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_GEI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 >= mvm->stack[mvm->stack_size - 2].as_i64);
             mvm->stack_size -= 1;
@@ -1018,7 +1037,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_LEF: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 <= mvm->stack[mvm->stack_size - 2].as_f64);
             mvm->stack_size -= 1;
@@ -1028,7 +1047,7 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_LEI: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 <= mvm->stack[mvm->stack_size - 2].as_i64);
             mvm->stack_size -= 1;
@@ -1038,11 +1057,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_READ8: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = mvm->memory[addr];
             mvm->ip += 1;
@@ -1051,11 +1070,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_READ16: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 1) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = *(uint16_t*)&mvm->memory[addr];
             mvm->ip += 1;
@@ -1064,11 +1083,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_READ32: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 3) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = *(uint32_t*)&mvm->memory[addr];
             mvm->ip += 1;
@@ -1077,11 +1096,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_READ64: {
             if (mvm->stack_size < 1) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 1].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 7) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             mvm->stack[mvm->stack_size - 1].as_u64 = *(uint64_t*)&mvm->memory[addr];
             mvm->ip += 1;
@@ -1090,11 +1109,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_WRITE8: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             mvm->memory[addr] = (uint8_t)mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 2;
@@ -1104,11 +1123,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_WRITE16: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 1) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             *(uint16_t*)&mvm->memory[addr] = (uint16_t)mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 2;
@@ -1118,11 +1137,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_WRITE32: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 3) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             *(uint32_t*)&mvm->memory[addr] = (uint32_t)mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 2;
@@ -1132,11 +1151,11 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case INST_WRITE64: {
             if (mvm->stack_size < 2) {
-                return EXEPTION_STACK_UNDERFLOW;
+                return EXCEPTION_STACK_UNDERFLOW;
             }
             const MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
             if (addr >= MVM_MEMORY_CAPACITY - 7) {
-                return EXEPTION_MEMORY_ACCESS_VIOLATION;
+                return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
             *(uint64_t*)&mvm->memory[addr] = (uint64_t)mvm->stack[mvm->stack_size - 1].as_u64;
             mvm->stack_size -= 2;
@@ -1146,9 +1165,9 @@ ExeptionState mvm_execInst(MVM* mvm)
 
         case NUMBER_OF_INSTS:
         default:
-            return EXEPTION_ILLEGAL_INST;
+            return EXCEPTION_ILLEGAL_INST;
     }
-    return EXEPTION_SATE_OK;
+    return EXCEPTION_SATE_OK;
 }
 
 ExeptionState mvm_execProgram(MVM* mvm, int limit)
@@ -1156,16 +1175,16 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
     while (limit != 0 && !mvm->halt) {
         ExeptionState err = mvm_execInst(mvm);
         if (mvm->stack_size > MVM_STACK_CAPACITY) {
-            return EXEPTION_STACK_OVERFLOW;
+            return EXCEPTION_STACK_OVERFLOW;
         }
-        if (err != EXEPTION_SATE_OK) {
+        if (err != EXCEPTION_SATE_OK) {
             return err;
         }
         if (limit > 0) {
             --limit;
         }
     }
-    return EXEPTION_SATE_OK;
+    return EXCEPTION_SATE_OK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1173,7 +1192,7 @@ ExeptionState mvm_execProgram(MVM* mvm, int limit)
 ExeptionState interrupt_PRINTchar(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     if (mvm->stack[mvm->stack_size - 1].as_u64 != 13) {
@@ -1182,78 +1201,78 @@ ExeptionState interrupt_PRINTchar(MVM* mvm)
         printf("\n");
     }
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_PRINTf64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     printf("%lf", mvm->stack[mvm->stack_size - 1].as_f64);
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_PRINTi64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     printf("%" PRId64, mvm->stack[mvm->stack_size - 1].as_i64);
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_PRINTu64(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     printf("%" PRIu64, mvm->stack[mvm->stack_size - 1].as_u64);
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_PRINTptr(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     printf("0x%llx", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_ALLOC(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
-    return EXEPTION_SATE_OK;
+    return EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_FREE(MVM* mvm)
 {
     if (mvm->stack_size < 1) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     free(mvm->stack[mvm->stack_size - 1].as_ptr);
     mvm->stack_size -= 1;
-    return  EXEPTION_SATE_OK;
+    return  EXCEPTION_SATE_OK;
 }
 
 ExeptionState interrupt_DUMPMEM (MVM* mvm)
 {
     if (mvm->stack_size < 2) {
-        return EXEPTION_STACK_UNDERFLOW;
+        return EXCEPTION_STACK_UNDERFLOW;
     }
 
     MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
@@ -1262,7 +1281,7 @@ ExeptionState interrupt_DUMPMEM (MVM* mvm)
     if (addr >= MVM_MEMORY_CAPACITY
     || addr + size < addr
     || addr + size >= MVM_MEMORY_CAPACITY) {
-        return EXEPTION_MEMORY_ACCESS_VIOLATION;
+        return EXCEPTION_MEMORY_ACCESS_VIOLATION;
     }
 
     for (uint64_t i = addr; i < size; ++i) {
@@ -1271,14 +1290,17 @@ ExeptionState interrupt_DUMPMEM (MVM* mvm)
     printf("\n");
 
     mvm->stack_size -= 2;
-    return EXEPTION_SATE_OK;
+    return EXCEPTION_SATE_OK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 char* shift(int* argc, char*** argv)
 {
-    assert(*argc > 0);
+    if (*argc <= 0) {
+        fprintf(stderr, "ERROR: No more arguments to shift!");
+        exit(1);
+    }
     char* res = **argv;
     *argv += 1;
     *argc -= 1;
