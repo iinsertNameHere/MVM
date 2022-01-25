@@ -13,6 +13,12 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#   define PACKED __attribute__((__packed__))
+#else
+#   warning "Packed attributes is not implemented for this compiler! This may result in the program working incorrectly."
+#endif
+
 #define PRIsv ".*s"
 #define SV_FORMAT(sv) (int) (sv).count, (sv).data
 
@@ -27,11 +33,13 @@
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
 #define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
+#define MVM_FILE_MAGIC (uint32_t)0x4d564d
+#define MVM_FILE_VERSION (uint32_t)1
 //#define MVM_MEMORY_CAPACITY 20
 
 typedef enum {false, true} bool;
 
-typedef union Word {
+typedef union _WORD_ {
     uint64_t as_u64;
     int64_t as_i64;
     double as_f64;
@@ -44,7 +52,7 @@ Word word_f64(double value);
 Word word_i64(int64_t value);
 Word word_ptr(void* value);
 
-typedef struct StringView {
+typedef struct _STRINGVIEW_ {
     size_t count;
     const char* data;
 } StringView;
@@ -56,7 +64,7 @@ StringView sv_trim(StringView sv);
 StringView sv_chopByDelim(StringView* sv, char delim);
 bool sv_eq(StringView a, StringView b);
 
-typedef enum ExceptionState {
+typedef enum _EXCEPTIONSTATE_ {
     EXCEPTION_SATE_OK = 0,
     EXCEPTION_STACK_OVERFLOW,
     EXCEPTION_STACK_UNDERFLOW,
@@ -71,7 +79,7 @@ const char* exception_as_cstr(ExceptionState exception);
 
 typedef uint64_t InstAddr;
 
-typedef enum {
+typedef enum _INSTTYPE_ {
     INST_NOP = 0,
 
     INST_PUSH,
@@ -131,7 +139,7 @@ typedef struct Inst {
     Word operand;
 } Inst;
 
-typedef struct Label {
+typedef struct _LABEL_ {
     StringView name;
     Word word;
 } Label;
@@ -143,7 +151,7 @@ typedef struct DeferredOperand {
 
 typedef uint64_t MemoryAddr;
 
-typedef struct Masm {
+typedef struct _MASM_ {
     Label labels[MASM_LABEL_CAPACITY];
     size_t labels_size;
 
@@ -168,11 +176,11 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 StringView masm_slurpFile(Masm* masm, StringView file_path);
 bool masm_numberLiteral_as_Word (StringView sv, Word* out);
 
-typedef struct MVM MVM;
+typedef struct _MVM_ Mvm;
 
-typedef ExceptionState (*MvmInterrupt)(MVM*);
+typedef ExceptionState (*MvmInterrupt)(Mvm*);
 
-struct MVM {
+struct _MVM_ {
     Word stack[MVM_STACK_CAPACITY];
     uint64_t stack_size;
 
@@ -190,26 +198,33 @@ struct MVM {
 
 void masm_saveToFile(Masm* masm, const char* filePath);
 
-void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt);
-void mvm_dumpStack(FILE *stream, const MVM* mvm);
-// void mvm_dumpMemory(FILE *stream, const MVM* mvm);
-void mvm_saveProgramToFile(const MVM* mvm, const char* filePath);
-void mvm_loadProgramFromFile(MVM* mvm, const char* filePath);
+void mvm_pushInterrupt(Mvm* mvm, MvmInterrupt interrupt);
+void mvm_dumpStack(FILE *stream, const Mvm* mvm);
+// void mvm_dumpMemory(FILE *stream, const Mvm* mvm);
+void mvm_saveProgramToFile(const Mvm* mvm, const char* filePath);
+void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath);
 void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level);
-ExceptionState mvm_execInst(MVM* mvm);
-ExceptionState mvm_execProgram(MVM* mvm, int limit);
+ExceptionState mvm_execInst(Mvm* mvm);
+ExceptionState mvm_execProgram(Mvm* mvm, int limit);
+
+typedef struct _MVMFILE_META_ {
+    uint16_t version;
+    uint32_t magic;
+    uint64_t program_size;
+    uint64_t memory_size;
+    uint64_t memory_capacity;
+} PACKED MvmFile_Meta;
 
 ////////////////////////////////////////////
-ExceptionState interrupt_PRINTchar (MVM* mvm);
-ExceptionState interrupt_PRINTf64 (MVM* mvm);
-ExceptionState interrupt_PRINTi64 (MVM* mvm);
-ExceptionState interrupt_PRINTu64(MVM* mvm);
-ExceptionState interrupt_PRINTptr(MVM* mvm);
-ExceptionState interrupt_ALLOC(MVM* mvm);
-ExceptionState interrupt_FREE (MVM* mvm);
-ExceptionState interrupt_DUMPMEM (MVM* mvm);
+ExceptionState interrupt_PRINTchar (Mvm* mvm);
+ExceptionState interrupt_PRINTf64 (Mvm* mvm);
+ExceptionState interrupt_PRINTi64 (Mvm* mvm);
+ExceptionState interrupt_PRINTu64(Mvm* mvm);
+ExceptionState interrupt_PRINTptr(Mvm* mvm);
+ExceptionState interrupt_ALLOC(Mvm* mvm);
+ExceptionState interrupt_FREE (Mvm* mvm);
+ExceptionState interrupt_DUMPMEM (Mvm* mvm);
 ////////////////////////////////////////////
-
 
 char* shift(int* argc, char*** argv);
 #endif //MVM_SHARED_H
@@ -567,16 +582,36 @@ void masm_saveToFile(Masm* masm, const char* filePath)
         exit(1);
     }
 
+    MvmFile_Meta meta = {
+            .version = MVM_FILE_VERSION,
+            .magic = MVM_FILE_MAGIC,
+            .program_size = masm->program_size,
+            .memory_size = masm->memory_size,
+            .memory_capacity = masm->memory_capacity
+    };
+
+    fwrite(&meta, sizeof(meta), 1, f);
+    if (ferror(f)) {
+        fprintf(stderr, "ERROR: Could not write META to file '%s'! : %s\n", filePath, strerror(errno));
+        exit(1);
+    }
+
     fwrite(masm->program, sizeof(masm->program[0]), masm->program_size, f);
     if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: Could not write MASM_PROGRAM to file '%s'! : %s\n", filePath, strerror(errno));
+        exit(1);
+    }
+
+    fwrite(masm->memory, sizeof(masm->memory[0]), masm->memarena_size, f);
+    if (ferror(f)) {
+        fprintf(stderr, "ERROR: Could not write MASM_MEMORY to file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     fclose(f);
 }
 
-void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt)
+void mvm_pushInterrupt(Mvm* mvm, MvmInterrupt interrupt)
 {
     if (mvm->interrupts_size >= MVM_NATIVES_CAPACITY) {
         fprintf(stderr, "ERROR: Failed to build interrupt table!");
@@ -585,7 +620,7 @@ void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt)
     mvm->interrupts[mvm->interrupts_size++] = interrupt;
 }
 
-void mvm_dumpStack(FILE *stream, const MVM* mvm)
+void mvm_dumpStack(FILE *stream, const Mvm* mvm)
 {
     fprintf(stream, "STACK:\n");
     if (mvm->stack_size > 0) {
@@ -605,7 +640,7 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
     }
 }
 
-// void mvm_dumpMemory(FILE *stream, const MVM* mvm)
+// void mvm_dumpMemory(FILE *stream, const Mvm* mvm)
 // {
 //     fprintf(stream, "MEMORY:\n  ");
 //     for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
@@ -614,7 +649,7 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
 //     fprintf(stream, "\n");
 // }
 
-void mvm_saveProgramToFile(const MVM* mvm, const char* filePath)
+void mvm_saveProgramToFile(const Mvm* mvm, const char* filePath)
 {
     FILE* f = fopen(filePath, "wb");
     if (f == NULL) {
@@ -631,7 +666,7 @@ void mvm_saveProgramToFile(const MVM* mvm, const char* filePath)
     fclose(f);
 }
 
-void mvm_loadProgramFromFile(MVM* mvm, const char* filePath)
+void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
 {
     FILE* f = fopen(filePath, "rb");
     if (f == NULL) {
@@ -640,27 +675,28 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* filePath)
     }
 
     if (fseek(f, 0, SEEK_END) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
         exit(1);
     }
 
     long m = ftell(f);
     if (m < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
         exit(1);
     }
 
     if ((size_t)m % sizeof(mvm->program[0]) != 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: The file '%s' is not a valid mvm bytecode file!\n", filePath);
         exit(1);
     }
+
     if ((size_t) m > MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0])) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
         exit(1);
     }
 
     if (fseek(f, 0, SEEK_SET) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
         exit(1);
     }
 
@@ -795,7 +831,7 @@ void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level)
     }
 }
 
-ExceptionState mvm_execInst(MVM* mvm)
+ExceptionState mvm_execInst(Mvm* mvm)
 {
     if (mvm->ip >= mvm->program_size) {
         return EXCEPTION_ILLEGAL_INST_ACCESS;
@@ -1221,7 +1257,7 @@ ExceptionState mvm_execInst(MVM* mvm)
     return EXCEPTION_SATE_OK;
 }
 
-ExceptionState mvm_execProgram(MVM* mvm, int limit)
+ExceptionState mvm_execProgram(Mvm* mvm, int limit)
 {
     while (limit != 0 && !mvm->halt) {
         ExceptionState err = mvm_execInst(mvm);
@@ -1240,7 +1276,7 @@ ExceptionState mvm_execProgram(MVM* mvm, int limit)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ExceptionState interrupt_PRINTchar(MVM* mvm)
+ExceptionState interrupt_PRINTchar(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1255,7 +1291,7 @@ ExceptionState interrupt_PRINTchar(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_PRINTf64(MVM* mvm)
+ExceptionState interrupt_PRINTf64(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1266,7 +1302,7 @@ ExceptionState interrupt_PRINTf64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_PRINTi64(MVM* mvm)
+ExceptionState interrupt_PRINTi64(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1277,7 +1313,7 @@ ExceptionState interrupt_PRINTi64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_PRINTu64(MVM* mvm)
+ExceptionState interrupt_PRINTu64(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1288,7 +1324,7 @@ ExceptionState interrupt_PRINTu64(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_PRINTptr(MVM* mvm)
+ExceptionState interrupt_PRINTptr(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1299,7 +1335,7 @@ ExceptionState interrupt_PRINTptr(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_ALLOC(MVM* mvm)
+ExceptionState interrupt_ALLOC(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1309,7 +1345,7 @@ ExceptionState interrupt_ALLOC(MVM* mvm)
     return EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_FREE(MVM* mvm)
+ExceptionState interrupt_FREE(Mvm* mvm)
 {
     if (mvm->stack_size < 1) {
         return EXCEPTION_STACK_UNDERFLOW;
@@ -1320,7 +1356,7 @@ ExceptionState interrupt_FREE(MVM* mvm)
     return  EXCEPTION_SATE_OK;
 }
 
-ExceptionState interrupt_DUMPMEM (MVM* mvm)
+ExceptionState interrupt_DUMPMEM (Mvm* mvm)
 {
     if (mvm->stack_size < 2) {
         return EXCEPTION_STACK_UNDERFLOW;

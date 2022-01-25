@@ -6,7 +6,7 @@
 #include "../shared.h"
 
 // Slick VM
-MVM mvm = {0};
+Mvm mvm = {0};
 
 static void usage(FILE* stream)
 {

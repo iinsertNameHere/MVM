@@ -5,7 +5,7 @@
 #define MVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
-MVM mvm = {0};
+Mvm mvm = {0};
 
 int main(int argc, char** argv)
 {
