@@ -33,8 +33,8 @@
 #define MVM_PROGRAM_CAPACITY 1024
 #define MVM_NATIVES_CAPACITY 1024
 #define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
-#define MVM_FILE_MAGIC (uint32_t)0x4d564d
-#define MVM_FILE_VERSION (uint32_t)1
+#define MVM_FILE_MAGIC (uint32_t) 0x4d564d
+#define MVM_FILE_VERSION 1
 //#define MVM_MEMORY_CAPACITY 20
 
 typedef enum {false, true} bool;
@@ -646,38 +646,69 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
         exit(1);
     }
 
-    if (fseek(f, 0, SEEK_END) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
+    size_t n;
+
+    // Read and verify meta data.
+    MvmFile_Meta meta = {0};
+
+    n = fread(&meta, sizeof(meta), 1, f);
+    if (n < 1) {
+        fprintf(stderr, "ERROR: Could not read MVM_META from file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
-    long m = ftell(f);
-    if (m < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
+    if (meta.magic != MVM_FILE_MAGIC) {
+        fprintf(stderr, "ERROR: '%s' is not a valid mvm file! : "
+                        "Unexpected magic '%04X' : "
+                        "Expected '%04X'\n", filePath, meta.magic, MVM_FILE_MAGIC);
         exit(1);
     }
 
-    if ((size_t)m % sizeof(mvm->program[0]) != 0) {
-        fprintf(stderr, "ERROR: The file '%s' is not a valid mvm bytecode file!\n", filePath);
+    if (meta.version != MVM_FILE_VERSION) {
+        fprintf(stderr, "ERROR: Unsupported file version %d in file '%s'! : "
+                        "Expected version %d\n", meta.version, filePath, MVM_FILE_VERSION);
         exit(1);
     }
 
-    if ((size_t) m > MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0])) {
-        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
+    if (meta.program_size > MVM_PROGRAM_CAPACITY) {
+        fprintf(stderr, "ERROR: To large program section in file '%s'! : "
+                        "This file contains %lld instructions. : "
+                        "The max amount of instructions for this section is %d.\n",
+                        filePath, meta.program_size, MVM_PROGRAM_CAPACITY);
         exit(1);
     }
 
-    if (fseek(f, 0, SEEK_SET) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'!\n", filePath);
+    if (meta.memory_capacity > MVM_MEMORY_CAPACITY) {
+        fprintf(stderr, "ERROR: To large memory section in file '%s'! : "
+                        "This files memory section size is %lld bytes big. : "
+                        "The max size for this section is %d bytes.\n",
+                        filePath, meta.memory_capacity, MVM_MEMORY_CAPACITY);
         exit(1);
     }
 
-    size_t size = fread(mvm->program, sizeof(mvm->program[0]), (size_t)m / sizeof(mvm->program[0]), f);
-    if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
+    if (meta.memory_size > meta.memory_capacity)
+    {
+        fprintf(stderr, "ERROR: To large memory section in file '%s'! : "
+                        "%lld bytes of memory are declared but the memory section is %lld bytes big.\n",
+                        filePath, meta.memory_capacity, meta.memory_size);
         exit(1);
     }
-    mvm->program_size = (uint64_t)size;
+
+    // Read the program.
+    mvm->program_size = fread(mvm->program, sizeof(mvm->program[0]), meta.program_size, f);
+    if (mvm->program_size != meta.program_size) {
+        fprintf(stderr, "ERROR: Could only read %zd from a total of %lld program instructions from file '%s'!",
+                mvm->program_size, meta.program_size, filePath);
+        exit(1);
+    }
+
+    // Read the memory.
+    n = fread(&mvm->memory, sizeof(mvm->memory[0]), meta.memory_size, f);
+    if (n != meta.memory_size) {
+        fprintf(stderr, "ERROR: Could only read %zd from a total of %lld bytes of memory section from file '%s'!",
+                n, meta.memory_size, filePath);
+        exit(1);
+    }
 
     fclose(f);
 }
