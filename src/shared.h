@@ -19,7 +19,7 @@
 #define MASM_LABEL_CAPACITY 1024
 #define MASM_DEFERRED_OPERANDS_CAPACITY 1024
 #define MASM_MAX_INCLUDES 42
-#define MASM_TMP_MEMORY_CAPACITY (1000 * 1000 * 1000) // 1GB
+#define MASM_MEMARENA_CAPACITY (1000 * 1000 * 1000) // 1GB
 #define MASM_COMMENT_SYMBOL ';'
 #define MASM_PP_SYMBOL '%'
 
@@ -31,16 +31,20 @@
 
 typedef enum {false, true} bool;
 
-typedef union {
+typedef union Word {
     uint64_t as_u64;
     int64_t as_i64;
     double as_f64;
     void* as_ptr;
 } Word;
-
 static_assert(sizeof(Word) == 8, "The MVMs Word is expected to be 64 bits!");
 
-typedef struct {
+Word word_u64(uint64_t value);
+Word word_f64(double value);
+Word word_i64(int64_t value);
+Word word_ptr(void* value);
+
+typedef struct StringView {
     size_t count;
     const char* data;
 } StringView;
@@ -52,7 +56,7 @@ StringView sv_trim(StringView sv);
 StringView sv_chopByDelim(StringView* sv, char delim);
 bool sv_eq(StringView a, StringView b);
 
-typedef enum {
+typedef enum ExceptionState {
     EXCEPTION_SATE_OK = 0,
     EXCEPTION_STACK_OVERFLOW,
     EXCEPTION_STACK_UNDERFLOW,
@@ -122,33 +126,42 @@ const char* InstName(InstType instType);
 bool GetInstName(StringView name, InstType* out);
 bool InstHasOperand(InstType instType);
 
-typedef struct {
+typedef struct Inst {
     InstType type;
     Word operand;
 } Inst;
 
-typedef struct {
+typedef struct Label {
     StringView name;
     Word word;
 } Label;
 
-typedef struct {
+typedef struct DeferredOperand {
     StringView label;
     InstAddr addr;
 } DeferredOperand;
 
 typedef uint64_t MemoryAddr;
 
-typedef struct {
+typedef struct Masm {
     Label labels[MASM_LABEL_CAPACITY];
     size_t labels_size;
+
     DeferredOperand deferredOperands[MASM_DEFERRED_OPERANDS_CAPACITY];
     size_t deferredOperands_size;
-    char tmp_memory[MASM_TMP_MEMORY_CAPACITY];
-    size_t tmp_memory_size;
+
+    char memarena[MASM_MEMARENA_CAPACITY];
+    size_t memarena_size;
+
+    Inst program[MVM_PROGRAM_CAPACITY];
+    uint64_t program_size;
+
+    uint8_t memory[MVM_MEMORY_CAPACITY];
+    size_t memory_size;
+    size_t memory_capacity;
 } Masm;
 
-void* masm_tmpAlloc(Masm* masm, size_t size);
+void* masm_memarenaAlloc(Masm* masm, size_t size);
 bool masm_resolveLabel(const Masm* masm, StringView name, Word* out);
 bool masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
@@ -175,12 +188,14 @@ struct MVM {
     bool halt;
 };
 
+void masm_saveToFile(Masm* masm, const char* filePath);
+
 void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt);
 void mvm_dumpStack(FILE *stream, const MVM* mvm);
 // void mvm_dumpMemory(FILE *stream, const MVM* mvm);
-void mvm_saveProgramToFile(const MVM* mvm, const char* file_path);
-void mvm_loadProgramFromFile(MVM* mvm, const char* file_path);
-void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level);
+void mvm_saveProgramToFile(const MVM* mvm, const char* filePath);
+void mvm_loadProgramFromFile(MVM* mvm, const char* filePath);
+void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level);
 ExceptionState mvm_execInst(MVM* mvm);
 ExceptionState mvm_execProgram(MVM* mvm, int limit);
 
@@ -200,6 +215,26 @@ char* shift(int* argc, char*** argv);
 #endif //MVM_SHARED_H
 
 #ifdef MVM_SHARED_IMPLEMENTATION
+
+Word word_u64(uint64_t value)
+{
+    return (Word) {.as_u64 = value};
+}
+
+Word word_f64(double value)
+{
+    return (Word) {.as_f64 = value};
+}
+
+Word word_i64(int64_t value)
+{
+    return (Word) {.as_i64 = value};
+}
+
+Word word_ptr(void* value)
+{
+    return (Word) {.as_ptr = value};
+}
 
 StringView cstr_as_sv(const char* cstr)
 {
@@ -400,14 +435,14 @@ bool InstHasOperand(InstType instType)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void* masm_tmpAlloc(Masm* masm, size_t size)
+void* masm_memarenaAlloc(Masm* masm, size_t size)
 {
-    if (masm->tmp_memory_size + size > MASM_TMP_MEMORY_CAPACITY) {
+    if (masm->memarena_size + size > MASM_MEMARENA_CAPACITY) {
         fprintf(stderr, "ERROR: Linear allocation failed!");
         exit(1);
     }
-    void* ptr = masm->tmp_memory + masm->tmp_memory_size;
-    masm->tmp_memory_size += size;
+    void* ptr = masm->memarena + masm->memarena_size;
+    masm->memarena_size += size;
     return ptr;
 }
 
@@ -449,7 +484,7 @@ void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label)
 
 StringView masm_slurpFile(Masm* masm, StringView filePath)
 {
-    char* filePath_cstr = masm_tmpAlloc(masm, filePath.count + 1);
+    char* filePath_cstr = masm_memarenaAlloc(masm, filePath.count + 1);
     if (filePath_cstr == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file-path! : %s\n", strerror(errno));
         exit(1);
@@ -474,7 +509,7 @@ StringView masm_slurpFile(Masm* masm, StringView filePath)
         exit(1);
     }
 
-    char* buffer = masm_tmpAlloc(masm, (size_t)m);
+    char* buffer = masm_memarenaAlloc(masm, (size_t)m);
     if (buffer == NULL) {
         fprintf(stderr, "ERROR: Could not allocate memory for file! : %s\n", strerror(errno));
         exit(1);
@@ -511,9 +546,9 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out)
     Word result = {0};
 
     char* endptr = 0;
-    result.as_u64 = strtoull(cstr, &endptr, 10);
+    result = word_u64(strtoull(cstr, &endptr, 10));
     if ((size_t)(endptr - cstr) != sv.count) {
-        result.as_f64 = strtod(cstr, &endptr);
+        result = word_f64(strtod(cstr, &endptr));
         if ((size_t)(endptr - cstr) != sv.count) {
             return false;
         }
@@ -523,6 +558,23 @@ bool masm_numberLiteral_as_Word (StringView sv, Word* out)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void masm_saveToFile(Masm* masm, const char* filePath)
+{
+    FILE* f = fopen(filePath, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", filePath, strerror(errno));
+        exit(1);
+    }
+
+    fwrite(masm->program, sizeof(masm->program[0]), masm->program_size, f);
+    if (ferror(f)) {
+        fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", filePath, strerror(errno));
+        exit(1);
+    }
+
+    fclose(f);
+}
 
 void mvm_pushInterrupt(MVM* mvm, MvmInterrupt interrupt)
 {
@@ -562,59 +614,59 @@ void mvm_dumpStack(FILE *stream, const MVM* mvm)
 //     fprintf(stream, "\n");
 // }
 
-void mvm_saveProgramToFile(const MVM* mvm, const char* file_path)
+void mvm_saveProgramToFile(const MVM* mvm, const char* filePath)
 {
-    FILE* f = fopen(file_path, "wb");
+    FILE* f = fopen(filePath, "wb");
     if (f == NULL) {
-        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     fwrite(mvm->program, sizeof(mvm->program[0]), mvm->program_size, f);
     if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     fclose(f);
 }
 
-void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
+void mvm_loadProgramFromFile(MVM* mvm, const char* filePath)
 {
-    FILE* f = fopen(file_path, "rb");
+    FILE* f = fopen(filePath, "rb");
     if (f == NULL) {
-        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     if (fseek(f, 0, SEEK_END) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     long m = ftell(f);
     if (m < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     if ((size_t)m % sizeof(mvm->program[0]) != 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
     if ((size_t) m > MVM_PROGRAM_CAPACITY * sizeof(mvm->program[0])) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     if (fseek(f, 0, SEEK_SET) < 0) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
 
     size_t size = fread(mvm->program, sizeof(mvm->program[0]), (size_t)m / sizeof(mvm->program[0]), f);
     if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", file_path, strerror(errno));
+        fprintf(stderr, "ERROR: Could not read file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
     }
     mvm->program_size = (uint64_t)size;
@@ -622,19 +674,14 @@ void mvm_loadProgramFromFile(MVM* mvm, const char* file_path)
     fclose(f);
 }
 
-void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t level)
+void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level)
 {
     StringView source_original = masm_slurpFile(masm, inputFile);
     StringView source = source_original;
-    mvm->program_size = 0;
 
     // Pass one
     int lineNum = 0;
     while (source.count > 0) {
-        if (mvm->program_size >= MVM_PROGRAM_CAPACITY) {
-            fprintf(stderr, "%" PRIsv ":%d: ERROR: Program size exceeded!", SV_FORMAT(inputFile), lineNum);
-            exit(1);
-        }
         StringView  line = sv_trim(sv_chopByDelim(&source, '\n'));
         lineNum += 1;
         if (line.count > 0 && *line.data != MASM_COMMENT_SYMBOL) {
@@ -654,13 +701,13 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                         Word word = {0};
                         if (!masm_numberLiteral_as_Word(value, &word)) {
                             fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not a number!\n", SV_FORMAT(inputFile), lineNum,
-                            SV_FORMAT(value));
+                                    SV_FORMAT(value));
                             exit(1);
                         }
 
                         if (!masm_bindLabel(masm, label, word)) {
                             fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is already defined!!\n", SV_FORMAT(inputFile), lineNum,
-                            SV_FORMAT(label));
+                                    SV_FORMAT(label));
                             exit(1);
                         }
                     } else {
@@ -675,7 +722,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                             line.count -= 2;
 
                             if (level + 1 < MASM_MAX_INCLUDES) {
-                                mvm_translateSourceFile(mvm, masm, line, level + 1);
+                                mvm_translateSourceFile(masm, line, level + 1);
                             } else {
                                 fprintf(stderr, "%" PRIsv ":%d: ERROR: Exceeded maximum-include-level!\n", SV_FORMAT(inputFile), lineNum);
                                 exit(1);
@@ -695,7 +742,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
 
                 if (token.count > 0 && token.data[token.count - 1] == ':') {
                     StringView label = (StringView) {.count = token.count - 1, .data = token.data};
-                    if (!masm_bindLabel(masm, label, (Word) { .as_u64 = mvm->program_size })) {
+                    if (!masm_bindLabel(masm, label, word_u64(masm->program_size))) {
                         fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is already defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
                         exit(1);
                     }
@@ -707,7 +754,11 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
                     InstType instType = INST_NOP;
 
                     if (GetInstName(token, &instType)) {
-                        mvm->program[mvm->program_size].type = instType;
+                        if (masm->program_size >= MVM_PROGRAM_CAPACITY) {
+                            fprintf(stderr, "ERROR: Program size exceeded!");
+                            exit(1);
+                        }
+                        masm->program[masm->program_size].type = instType;
                         if (InstHasOperand(instType)) {
                             if (operand.count == 0) {
                                 fprintf(stderr, "%" PRIsv ":%d: ERROR: instruction '%" PRIsv "' expects an operand!\n",
@@ -717,15 +768,15 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
 
                             if (!masm_numberLiteral_as_Word(
                                     operand,
-                                    &mvm->program[mvm->program_size].operand)) {
-                                masm_pushDeferredOperand(masm, mvm->program_size, operand);
+                                    &masm->program[masm->program_size].operand)) {
+                                masm_pushDeferredOperand(masm, masm->program_size, operand);
                             }
 
                         }
-                        mvm->program_size += 1;
+                        masm->program_size += 1;
                     } else {
                         fprintf(stderr, "%" PRIsv ":%d: ERROR: Unknown instruction '%" PRIsv "'!\n", SV_FORMAT(inputFile), lineNum,
-                        SV_FORMAT(token));
+                                SV_FORMAT(token));
                         exit(1);
                     }
                 }
@@ -736,7 +787,7 @@ void mvm_translateSourceFile(MVM* mvm, Masm* masm, StringView inputFile, size_t 
     // Pass two
     for (size_t i = 0; i < masm->deferredOperands_size; ++i) {
         StringView label = masm->deferredOperands[i].label;
-        Word* operand = &mvm->program[masm->deferredOperands[i].addr].operand;
+        Word* operand = &masm->program[masm->deferredOperands[i].addr].operand;
         if (!masm_resolveLabel(masm, label, operand)) {
             fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not defined!\n", SV_FORMAT(inputFile), lineNum, SV_FORMAT(label));
             exit(1);
@@ -890,7 +941,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 & mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2]= word_u64(mvm->stack[mvm->stack_size - 2].as_u64 & mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -900,7 +951,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 | mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 2].as_u64 | mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -910,7 +961,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 ^ mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 2].as_u64 ^ mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -920,7 +971,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 1) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = ~mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 1] = word_u64(~mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -930,7 +981,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 2].as_u64 >> mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -940,7 +991,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 << mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 2]= word_u64(mvm->stack[mvm->stack_size - 2].as_u64 << mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1000,7 +1051,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_u64 = (mvm->stack[mvm->stack_size - 1].as_u64 == mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 1].as_u64 == mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1010,7 +1061,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 1) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = !mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack[mvm->stack_size - 1] = word_u64(!mvm->stack[mvm->stack_size - 1].as_u64);
             mvm->ip += 1;
             break;
         }
@@ -1019,7 +1070,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 >= mvm->stack[mvm->stack_size - 2].as_f64);
+            mvm->stack[mvm->stack_size - 2] = word_f64(mvm->stack[mvm->stack_size - 1].as_f64 >= mvm->stack[mvm->stack_size - 2].as_f64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1029,7 +1080,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 >= mvm->stack[mvm->stack_size - 2].as_i64);
+            mvm->stack[mvm->stack_size - 2] = word_f64(mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1039,7 +1090,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_f64 = (mvm->stack[mvm->stack_size - 1].as_f64 <= mvm->stack[mvm->stack_size - 2].as_f64);
+            mvm->stack[mvm->stack_size - 2] = word_f64(mvm->stack[mvm->stack_size - 1].as_f64 <= mvm->stack[mvm->stack_size - 2].as_f64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1049,7 +1100,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2].as_i64 = (mvm->stack[mvm->stack_size - 1].as_i64 <= mvm->stack[mvm->stack_size - 2].as_i64);
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 1].as_u64 <= mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1063,7 +1114,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (addr >= MVM_MEMORY_CAPACITY) {
                 return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = mvm->memory[addr];
+            mvm->stack[mvm->stack_size - 1] = word_u64(mvm->memory[addr]);
             mvm->ip += 1;
             break;
         }
@@ -1076,7 +1127,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (addr >= MVM_MEMORY_CAPACITY - 1) {
                 return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint16_t*)&mvm->memory[addr];
+            mvm->stack[mvm->stack_size - 1] = word_u64(*(uint16_t*)&mvm->memory[addr]);
             mvm->ip += 1;
             break;
         }
@@ -1089,7 +1140,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (addr >= MVM_MEMORY_CAPACITY - 3) {
                 return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint32_t*)&mvm->memory[addr];
+            mvm->stack[mvm->stack_size - 1] = word_u64(*(uint32_t*)&mvm->memory[addr]);
             mvm->ip += 1;
             break;
         }
@@ -1102,7 +1153,7 @@ ExceptionState mvm_execInst(MVM* mvm)
             if (addr >= MVM_MEMORY_CAPACITY - 7) {
                 return EXCEPTION_MEMORY_ACCESS_VIOLATION;
             }
-            mvm->stack[mvm->stack_size - 1].as_u64 = *(uint64_t*)&mvm->memory[addr];
+            mvm->stack[mvm->stack_size - 1] = word_u64(*(uint64_t*)&mvm->memory[addr]);
             mvm->ip += 1;
             break;
         }
@@ -1254,7 +1305,7 @@ ExceptionState interrupt_ALLOC(MVM* mvm)
         return EXCEPTION_STACK_UNDERFLOW;
     }
 
-    mvm->stack[mvm->stack_size - 1].as_ptr = malloc(mvm->stack[mvm->stack_size - 1].as_u64);
+    mvm->stack[mvm->stack_size - 1] = word_ptr(malloc(mvm->stack[mvm->stack_size - 1].as_u64));
     return EXCEPTION_SATE_OK;
 }
 

@@ -5,7 +5,6 @@
 #define MVM_SHARED_IMPLEMENTATION
 #include "../shared.h"
 
-MVM mvm = {0};
 Masm masm = {0};
 
 static void usage(FILE* stream)
@@ -69,11 +68,11 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-    mvm_translateSourceFile(&mvm, &masm, cstr_as_sv(inputFilePath), 0);
-    mvm_saveProgramToFile(&mvm, outputFilePath);
+    mvm_translateSourceFile(&masm, cstr_as_sv(inputFilePath), 0);
+    masm_saveToFile(&masm, outputFilePath);
 
     if (debug) {
-        printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.tmp_memory_size);
+        printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.memarena_size);
     }
 
     return  0;
