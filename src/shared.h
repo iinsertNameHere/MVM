@@ -200,8 +200,6 @@ void masm_saveToFile(Masm* masm, const char* filePath);
 
 void mvm_pushInterrupt(Mvm* mvm, MvmInterrupt interrupt);
 void mvm_dumpStack(FILE *stream, const Mvm* mvm);
-// void mvm_dumpMemory(FILE *stream, const Mvm* mvm);
-void mvm_saveProgramToFile(const Mvm* mvm, const char* filePath);
 void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath);
 void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level);
 ExceptionState mvm_execInst(Mvm* mvm);
@@ -638,32 +636,6 @@ void mvm_dumpStack(FILE *stream, const Mvm* mvm)
     } else {
         fprintf(stream, " [empty]\n");
     }
-}
-
-// void mvm_dumpMemory(FILE *stream, const Mvm* mvm)
-// {
-//     fprintf(stream, "MEMORY:\n  ");
-//     for (size_t i = 0; i < MVM_MEMORY_CAPACITY; i++) {
-//         fprintf(stream, "%02X ", mvm->memory[i]);
-//     }
-//     fprintf(stream, "\n");
-// }
-
-void mvm_saveProgramToFile(const Mvm* mvm, const char* filePath)
-{
-    FILE* f = fopen(filePath, "wb");
-    if (f == NULL) {
-        fprintf(stderr, "ERROR: Could not open file '%s'! : %s\n", filePath, strerror(errno));
-        exit(1);
-    }
-
-    fwrite(mvm->program, sizeof(mvm->program[0]), mvm->program_size, f);
-    if (ferror(f)) {
-        fprintf(stderr, "ERROR: Could not write to file '%s'! : %s\n", filePath, strerror(errno));
-        exit(1);
-    }
-
-    fclose(f);
 }
 
 void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
