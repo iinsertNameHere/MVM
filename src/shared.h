@@ -13,11 +13,13 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+// PACK struct definition code: https://stackoverflow.com/a/3312896/18037447
 #if defined(__GNUC__) || defined(__clang__)
-#   define PACKED __attribute__((__packed__))
-#else
-#   warning "Packed attributes is not implemented for this compiler! This may result in the program working incorrectly."
+#   define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#elif defined(_MSC_VER)
+#   define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #endif
+
 
 #define PRIsv ".*s"
 #define SV_FORMAT(sv) (int) (sv).count, (sv).data
@@ -206,13 +208,14 @@ void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level);
 ExceptionState mvm_execInst(Mvm* mvm);
 ExceptionState mvm_execProgram(Mvm* mvm, int limit);
 
-typedef struct _MVMFILE_META_ {
+PACK(struct _MVMFILE_META_ {
     uint16_t version;
     uint32_t magic;
     uint64_t program_size;
     uint64_t memory_size;
     uint64_t memory_capacity;
-} PACKED MvmFile_Meta;
+});
+typedef struct _MVMFILE_META_ MvmFile_Meta;
 
 ////////////////////////////////////////////
 ExceptionState interrupt_PRINTchar (Mvm* mvm);
