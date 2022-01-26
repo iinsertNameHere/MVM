@@ -7,9 +7,11 @@
 %define alloc      5
 %define free       6
 %define mem_dump   7
+%define write      8
 ;; ----------------- ;;
 
-%define NL 13 ; define new-line ascii code
+; define new-line ascii code
+%define NL 13
 
 jmp stdlib_end ; Skip function definition to prevent executing them after definition
 

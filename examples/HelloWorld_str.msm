@@ -1,0 +1,21 @@
+;; The simplest Hallo-World example
+%include "../msmlib/stdlib.mlb"
+
+; Defining the string and the size of the string
+%define string "Hello World!"
+%define string_size 12
+
+; Append new-line char to string at runtime
+push string
+push string_size
+plusi
+push NL          ; You also can add a new line char in the string
+write8           ; definition by adding '\n' where you want to have a new line.
+
+; Write string to stdout
+push string
+push string_size
+push 1           ; Increment string size by 1
+plusi            ; course we added one char
+int write        ; Args: [memory_ptr, size]
+hlt

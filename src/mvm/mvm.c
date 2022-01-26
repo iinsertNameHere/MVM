@@ -86,6 +86,7 @@ int main(int argc, char** argv)
     mvm_pushInterrupt(&mvm, interrupt_ALLOC);     // 5
     mvm_pushInterrupt(&mvm, interrupt_FREE);      // 6
     mvm_pushInterrupt(&mvm, interrupt_DUMPMEM);   // 7
+    mvm_pushInterrupt(&mvm, interrupt_WRITE);     // 8
 
     mvm_loadProgramFromFile(&mvm, inputFilePath);
     if (!debug) {

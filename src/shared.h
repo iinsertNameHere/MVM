@@ -174,7 +174,8 @@ bool masm_resolveLabel(const Masm* masm, StringView name, Word* out);
 bool masm_bindLabel(Masm* masm, StringView name, Word word);
 void masm_pushDeferredOperand(Masm* masm, InstAddr addr, StringView label);
 StringView masm_slurpFile(Masm* masm, StringView file_path);
-bool masm_numberLiteral_as_Word (StringView sv, Word* out);
+Word masm_pushStringToMemory(Masm* masm, StringView string);
+bool masm_translateLiteral (Masm* masm, StringView sv, Word* out);
 
 typedef struct _MVM_ Mvm;
 
@@ -222,6 +223,7 @@ ExceptionState interrupt_PRINTptr(Mvm* mvm);
 ExceptionState interrupt_ALLOC(Mvm* mvm);
 ExceptionState interrupt_FREE (Mvm* mvm);
 ExceptionState interrupt_DUMPMEM (Mvm* mvm);
+ExceptionState interrupt_WRITE (Mvm* mvm);
 ////////////////////////////////////////////
 
 char* shift(int* argc, char*** argv);
@@ -547,26 +549,48 @@ StringView masm_slurpFile(Masm* masm, StringView filePath)
     };
 }
 
-bool masm_numberLiteral_as_Word (StringView sv, Word* out)
+Word masm_pushStringToMemory(Masm* masm, StringView string)
 {
-    if (sv.count >= 1024) {
-        return false;
+    if (masm->memory_size + string.count > MVM_MEMORY_CAPACITY) {
+        fprintf(stderr, "ERROR: Couldn't push string '%" PRIsv "' to memory!", SV_FORMAT(string));
+        exit(1);
     }
-    char cstr[sv.count + 1];
-    memcpy(cstr, sv.data, sv.count);
-    cstr[sv.count] = '\0';
 
-    Word result = {0};
+    Word res = word_u64(masm->memory_size);
+    memcpy(masm->memory + masm->memory_size, string.data, string.count);
+    masm->memory_size += string.count;
 
-    char* endptr = 0;
-    result = word_u64(strtoull(cstr, &endptr, 10));
-    if ((size_t)(endptr - cstr) != sv.count) {
-        result = word_f64(strtod(cstr, &endptr));
-        if ((size_t)(endptr - cstr) != sv.count) {
-            return false;
+    if (masm->memory_size > masm->memory_capacity) {
+        masm->memory_capacity = masm->memory_size;
+    }
+
+    return res;
+}
+
+bool masm_translateLiteral (Masm* masm, StringView sv, Word* out)
+{
+    if (sv.count >= 2 && *sv.data == '"' && sv.data[sv.count - 1] == '"') {
+        sv.data += 1;
+        sv.count -= 2;
+
+        *out = masm_pushStringToMemory(masm, sv);
+    } else {
+
+        char* cstr = masm_memarenaAlloc(masm, sv.count + 1);
+        memcpy(cstr, sv.data, sv.count);
+        cstr[sv.count] = '\0';
+
+        Word result = {0};
+        char *endptr = 0;
+        result = word_u64(strtoull(cstr, &endptr, 10));
+        if ((size_t) (endptr - cstr) != sv.count) {
+            result = word_f64(strtod(cstr, &endptr));
+            if ((size_t) (endptr - cstr) != sv.count) {
+                return false;
+            }
         }
+        *out = result;
     }
-    *out = result;
     return true;
 }
 
@@ -680,7 +704,7 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
 
     if (meta.memory_capacity > MVM_MEMORY_CAPACITY) {
         fprintf(stderr, "ERROR: To large memory section in file '%s'! : "
-                        "This files memory section size is %lld bytes big. : "
+                        "This files memory section size is %" PRIu64 " bytes big. : "
                         "The max size for this section is %d bytes.\n",
                         filePath, meta.memory_capacity, MVM_MEMORY_CAPACITY);
         exit(1);
@@ -689,7 +713,7 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
     if (meta.memory_size > meta.memory_capacity)
     {
         fprintf(stderr, "ERROR: To large memory section in file '%s'! : "
-                        "%lld bytes of memory are declared but the memory section is %lld bytes big.\n",
+                        "%" PRIu64 " bytes of memory are declared but the memory section is %lld bytes big.\n",
                         filePath, meta.memory_capacity, meta.memory_size);
         exit(1);
     }
@@ -697,15 +721,15 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
     // Read the program.
     mvm->program_size = fread(mvm->program, sizeof(mvm->program[0]), meta.program_size, f);
     if (mvm->program_size != meta.program_size) {
-        fprintf(stderr, "ERROR: Could only read %zd from a total of %lld program instructions from file '%s'!",
+        fprintf(stderr, "ERROR: Could only read %zd from a total of %" PRIu64 " program instructions from file '%s'!",
                 mvm->program_size, meta.program_size, filePath);
         exit(1);
     }
 
     // Read the memory.
-    n = fread(&mvm->memory, sizeof(mvm->memory[0]), meta.memory_size, f);
+    n = fread(mvm->memory, sizeof(mvm->memory[0]), meta.memory_size, f);
     if (n != meta.memory_size) {
-        fprintf(stderr, "ERROR: Could only read %zd from a total of %lld bytes of memory section from file '%s'!",
+        fprintf(stderr, "ERROR: Could only read %zd from a total of %" PRIu64 " bytes of memory section from file '%s'!",
                 n, meta.memory_size, filePath);
         exit(1);
     }
@@ -736,10 +760,10 @@ void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level)
 
                     if (label.count > 0) {
                         line = sv_trim(line);
-                        StringView value = sv_chopByDelim(&line, ' ');
+                        StringView value = line;
                         Word word = {0};
-                        if (!masm_numberLiteral_as_Word(value, &word)) {
-                            fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not a number!\n", SV_FORMAT(inputFile), lineNum,
+                        if (!masm_translateLiteral(masm, value, &word)) {
+                            fprintf(stderr, "%" PRIsv ":%d: ERROR: '%" PRIsv "' is not a string or a number!\n", SV_FORMAT(inputFile), lineNum,
                                     SV_FORMAT(value));
                             exit(1);
                         }
@@ -775,7 +799,9 @@ void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level)
                         exit(1);
                     }
                 } else {
-
+                    fprintf(stderr, "%" PRIsv ":%d: ERROR: Unknown preprocessor directive '%" PRIsv "'!\n", SV_FORMAT(inputFile), lineNum,
+                            SV_FORMAT(token));
+                    exit(1);
                 }
             } else {
 
@@ -805,7 +831,8 @@ void mvm_translateSourceFile(Masm* masm, StringView inputFile, size_t level)
                                 exit(1);
                             }
 
-                            if (!masm_numberLiteral_as_Word(
+                            if (!masm_translateLiteral(
+                                    masm,
                                     operand,
                                     &masm->program[masm->program_size].operand)) {
                                 masm_pushDeferredOperand(masm, masm->program_size, operand);
@@ -1366,20 +1393,46 @@ ExceptionState interrupt_DUMPMEM (Mvm* mvm)
     }
 
     MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
-    uint64_t size = mvm->stack[mvm->stack_size - 1].as_u64;
+    uint64_t count = mvm->stack[mvm->stack_size - 1].as_u64;
 
-    if (addr >= MVM_MEMORY_CAPACITY
-    || addr + size < addr
-    || addr + size >= MVM_MEMORY_CAPACITY) {
+    if (addr >= MVM_MEMORY_CAPACITY) {
+        return EXCEPTION_ILLEGAL_INST_ACCESS;
+    }
+
+    if (addr + count < addr || addr + count >= MVM_MEMORY_CAPACITY) {
         return EXCEPTION_MEMORY_ACCESS_VIOLATION;
     }
 
-    for (uint64_t i = addr; i < size; ++i) {
+    for (uint64_t i = addr; i < count; ++i) {
         printf("%02X ", mvm->memory[addr + i]);
     }
     printf("\n");
 
     mvm->stack_size -= 2;
+    return EXCEPTION_SATE_OK;
+}
+
+ExceptionState interrupt_WRITE (Mvm* mvm)
+{
+    if (mvm->stack_size < 2) {
+        return EXCEPTION_STACK_UNDERFLOW;
+    }
+
+    MemoryAddr addr = mvm->stack[mvm->stack_size - 2].as_u64;
+    uint64_t count = mvm->stack[mvm->stack_size - 1].as_u64;
+
+    if (addr >= MVM_MEMORY_CAPACITY) {
+        return EXCEPTION_ILLEGAL_INST_ACCESS;
+    }
+
+    if (addr + count < addr || addr + count >= MVM_MEMORY_CAPACITY) {
+        return EXCEPTION_MEMORY_ACCESS_VIOLATION;
+    }
+
+    fwrite(&mvm->memory[addr], sizeof(mvm->memory[0]), count, stdout);
+
+    mvm->stack_size -= 2;
+
     return EXCEPTION_SATE_OK;
 }
 

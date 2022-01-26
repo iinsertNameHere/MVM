@@ -1,4 +1,4 @@
-;; Simple Hallo-World example, not involving the memory operations
+;; Advanced Hallo-World example without memory operations
 %include "../msmlib/stdlib.mlb"
 
 ; Define SPACE ascii code
