@@ -20,6 +20,22 @@
 #   define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #endif
 
+// Checking for OS type
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+#   define OS (uint16_t) 0x544e
+#elif defined(__linux__) || defined(linux) || defined(__linux)
+#   define OS (uint16_t) 0x584c 
+#elif defined(unix) || defined(__unix) || defined(__unix__)
+#   define OS (uint16_t) 0x5855
+#elif defined(__APPLE__) || defined(__MACH__)
+#   define OS (uint16_t) 0x4c41
+#elif defined(__FreeBSD__)
+#   define OS (uint16_t) 0x4246
+#elif defined(__ANDROID__)
+#   define OS (uitn16_t) 0x4441
+else
+#   define OS (uint16_t) 0x4f4e
+#endif
 
 #define PRIsv ".*s"
 #define SV_FORMAT(sv) (int) (sv).count, (sv).data
@@ -36,7 +52,7 @@
 #define MVM_NATIVES_CAPACITY 1024
 #define MVM_MEMORY_CAPACITY (640 * 1000) // 640 KB
 #define MVM_FILE_MAGIC (uint32_t) 0x4d564d
-#define MVM_FILE_VERSION 1
+#define MVM_FILE_VERSION 3
 //#define MVM_MEMORY_CAPACITY 20
 
 typedef enum {false, true} bool;
@@ -199,7 +215,7 @@ struct _MVM_ {
     bool halt;
 };
 
-void masm_saveToFile(Masm* masm, const char* filePath);
+void masm_saveToFile(Masm* masm, const char* filePathm, bool wos);
 
 void mvm_pushInterrupt(Mvm* mvm, MvmInterrupt interrupt);
 void mvm_dumpStack(FILE *stream, const Mvm* mvm);
@@ -209,11 +225,13 @@ ExceptionState mvm_execInst(Mvm* mvm);
 ExceptionState mvm_execProgram(Mvm* mvm, int limit);
 
 PACK(struct _MVMFILE_META_ {
+    uint16_t os;
     uint16_t version;
     uint32_t magic;
     uint64_t program_size;
     uint64_t memory_size;
     uint64_t memory_capacity;
+    uint8_t wos;
 });
 typedef struct _MVMFILE_META_ MvmFile_Meta;
 
@@ -599,7 +617,7 @@ bool masm_translateLiteral (Masm* masm, StringView sv, Word* out)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void masm_saveToFile(Masm* masm, const char* filePath)
+void masm_saveToFile(Masm* masm, const char* filePath, bool wos)
 {
     FILE* f = fopen(filePath, "wb");
     if (f == NULL) {
@@ -608,11 +626,13 @@ void masm_saveToFile(Masm* masm, const char* filePath)
     }
 
     MvmFile_Meta meta = {
+            .os = OS,
             .version = MVM_FILE_VERSION,
             .magic = MVM_FILE_MAGIC,
             .program_size = masm->program_size,
             .memory_size = masm->memory_size,
-            .memory_capacity = masm->memory_capacity
+            .memory_capacity = masm->memory_capacity,
+            .wos = wos
     };
 
     fwrite(&meta, sizeof(meta), 1, f);
@@ -695,6 +715,32 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
         fprintf(stderr, "ERROR: Unsupported file version %d in file '%s'! : "
                         "Expected version %d\n", meta.version, filePath, MVM_FILE_VERSION);
         exit(1);
+    }
+    
+    if (meta.os != OS && meta.wos) {
+    	switch (meta.os) {
+    	   case (uint16_t)0x544e: 
+    	      printf("[!] This programm was compiled for Windows based systems\n");
+    	      break;
+    	   case (uint16_t)0x5855:
+    	      printf("[!] This programm was compiled for UNIX based systems\n");
+    	      break;
+    	   case (uint16_t)0x4c41:
+    	      printf("[!] This programm was compiled for Mac-OS-X based systems\n");
+    	      break;
+    	   case (uint16_t)0x584c:
+    	      printf("[!] This programm was compiled for LINUX based systems\n");
+    	      break;
+    	   case (uint16_t)0x4246:
+    	      printf("[!] This programm was compiled for FreeBSD based systems\n");
+    	      break;
+    	   case (uint16_t)0x4441:
+    	      printf("[!] This programm was compiled for Android based systems\n");
+    	      break;
+    	   default:
+    	      printf("[!] This programm was compiled for an UNKNOWN operating system\n");
+    	      break;
+    	}
     }
 
     if (meta.program_size > MVM_PROGRAM_CAPACITY) {

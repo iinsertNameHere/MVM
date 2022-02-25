@@ -12,6 +12,7 @@ static void usage(FILE* stream)
     fprintf(stream, "Usage: masm -i <input.msm> -o <output.mbc> [options]\n");
     fprintf(stream, "  -h          Provides a help list.\n");
     fprintf(stream, "  -d          Enables step-debug mode.\n");
+    fprintf(stream, "  -c          Enables Compatibility Warnings.\n");
 }
 
 int main(int argc, char** argv)
@@ -21,6 +22,7 @@ int main(int argc, char** argv)
     const char* outputFilePath = NULL;
     int debug = 0;
     int error = 0;
+    bool wos = false;
     const char* errorFlag = NULL;
 
     while (argc > 0) {
@@ -44,6 +46,8 @@ int main(int argc, char** argv)
             exit(0);
         } else if (strcmp(flag, "-d") == 0) {
             debug = 1;
+        } else if (strcmp(flag, "-c") == 0) {
+            wos = true;
         } else {
             error = 1;
             errorFlag = flag;
@@ -69,7 +73,7 @@ int main(int argc, char** argv)
     }
 
     mvm_translateSourceFile(&masm, cstr_as_sv(inputFilePath), 0);
-    masm_saveToFile(&masm, outputFilePath);
+    masm_saveToFile(&masm, outputFilePath, wos);
 
     if (debug) {
         printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.memarena_size);
