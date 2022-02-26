@@ -76,7 +76,7 @@ int main(int argc, char** argv)
     masm_saveToFile(&masm, outputFilePath, wos);
 
     if (debug) {
-        printf("[DEBUG]: Consumed %lld bytes of memory.\n", masm.memarena_size);
+        printf("[DEBUG]: Consumed %d bytes of memory.\n", masm.memarena_size);
     }
 
     return  0;

@@ -20,9 +20,12 @@
 #   define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #endif
 
+
 // Checking for OS type
 #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
 #   define OS (uint16_t) 0x544e
+#elif defined(__ANDROID__)
+#   define OS (uitn16_t) 0x4441
 #elif defined(__linux__) || defined(linux) || defined(__linux)
 #   define OS (uint16_t) 0x584c 
 #elif defined(unix) || defined(__unix) || defined(__unix__)
@@ -31,8 +34,6 @@
 #   define OS (uint16_t) 0x4c41
 #elif defined(__FreeBSD__)
 #   define OS (uint16_t) 0x4246
-#elif defined(__ANDROID__)
-#   define OS (uitn16_t) 0x4441
 else
 #   define OS (uint16_t) 0x4f4e
 #endif
@@ -641,7 +642,7 @@ void masm_saveToFile(Masm* masm, const char* filePath, bool wos)
         exit(1);
     }
 
-    fwrite(masm->program, sizeof(masm->program[0]), masm->program_size, f);
+    fwrite(masm->program, sizeof(masm->program[0]), (size_t)masm->program_size, f);
     if (ferror(f)) {
         fprintf(stderr, "ERROR: Could not write MASM_PROGRAM to file '%s'! : %s\n", filePath, strerror(errno));
         exit(1);
@@ -670,12 +671,12 @@ void mvm_dumpStack(FILE *stream, const Mvm* mvm)
     fprintf(stream, "STACK:\n");
     if (mvm->stack_size > 0) {
         for (InstAddr i = 0; i < mvm->stack_size; ++i) {
-            fprintf(stream, "  u64: %llu | i64: %lld | f64: %lf",
+            fprintf(stream, "  u64: %" PRIu64 " | i64: %" PRId64 " | f64: %lf",
                     mvm->stack[i].as_u64,
                     mvm->stack[i].as_i64,
                     mvm->stack[i].as_f64);
             if ((uintptr_t)mvm->stack[i].as_ptr > 0) {
-                fprintf(stream, " | ptr: 0x%llx\n", (uintptr_t) mvm->stack[i].as_ptr);
+                fprintf(stream, " | ptr: 0x%" PRIx64 "\n", (uint64_t)*(uintptr_t*) &mvm->stack[i].as_ptr);
             } else {
                 fprintf(stream, " | ptr: (nil)\n");
             }
@@ -684,6 +685,7 @@ void mvm_dumpStack(FILE *stream, const Mvm* mvm)
         fprintf(stream, " [empty]\n");
     }
 }
+
 
 void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
 {
@@ -768,15 +770,15 @@ void mvm_loadProgramFromFile(Mvm* mvm, const char* filePath)
     }
 
     // Read the program.
-    mvm->program_size = fread(mvm->program, sizeof(mvm->program[0]), meta.program_size, f);
+    mvm->program_size = fread(mvm->program, sizeof(mvm->program[0]), (size_t)meta.program_size, f);
     if (mvm->program_size != meta.program_size) {
-        fprintf(stderr, "ERROR: Could only read %zd from a total of %" PRIu64 " program instructions from file '%s'!",
+        fprintf(stderr, "ERROR: Could only read %" PRIu64 " from a total of %" PRIu64 " program instructions from file '%s'!",
                 mvm->program_size, meta.program_size, filePath);
         exit(1);
     }
 
     // Read the memory.
-    n = fread(mvm->memory, sizeof(mvm->memory[0]), meta.memory_size, f);
+    n = fread(mvm->memory, sizeof(mvm->memory[0]), (size_t)meta.memory_size, f);
     if (n != meta.memory_size) {
         fprintf(stderr, "ERROR: Could only read %zd from a total of %" PRIu64 " bytes of memory section from file '%s'!",
                 n, meta.memory_size, filePath);
@@ -1409,7 +1411,7 @@ ExceptionState interrupt_PRINTptr(Mvm* mvm)
         return EXCEPTION_STACK_UNDERFLOW;
     }
 
-    printf("0x%llx", (uintptr_t) mvm->stack[mvm->stack_size - 1].as_ptr);
+    printf("0x%" PRIx64, (uint64_t)*(uintptr_t*) &mvm->stack[mvm->stack_size - 1].as_ptr);
     mvm->stack_size -= 1;
     return  EXCEPTION_SATE_OK;
 }
@@ -1420,7 +1422,7 @@ ExceptionState interrupt_ALLOC(Mvm* mvm)
         return EXCEPTION_STACK_UNDERFLOW;
     }
 
-    mvm->stack[mvm->stack_size - 1] = word_ptr(malloc(mvm->stack[mvm->stack_size - 1].as_u64));
+    mvm->stack[mvm->stack_size - 1] = word_ptr(malloc((size_t)mvm->stack[mvm->stack_size - 1].as_u64));
     return EXCEPTION_SATE_OK;
 }
 
@@ -1478,7 +1480,7 @@ ExceptionState interrupt_WRITE (Mvm* mvm)
         return EXCEPTION_MEMORY_ACCESS_VIOLATION;
     }
 
-    fwrite(&mvm->memory[addr], sizeof(mvm->memory[0]), count, stdout);
+    fwrite(&mvm->memory[addr], sizeof(mvm->memory[0]), (size_t)count, stdout);
 
     mvm->stack_size -= 2;
 
