@@ -1022,7 +1022,7 @@ ExceptionState mvm_execInst(Mvm* mvm)
             }
 
             if (mvm->stack[mvm->stack_size - 1].as_u64 == 0) {
-                return ERR_DIV_BY_ZERO;
+                return EXCEPTION_DIV_BY_ZERO;
             }
 
             mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 % mvm->stack[mvm->stack_size - 1].as_u64;
