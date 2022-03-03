@@ -110,6 +110,7 @@ typedef enum _INSTTYPE_ {
     INST_MINUSI,
     INST_MULTI,
     INST_DIVI,
+    INST_MODI,
     INST_PLUSF,
     INST_MINUSF,
     INST_MULTF,
@@ -373,6 +374,7 @@ const char* InstName(InstType instType)
         case INST_MINUSI:  return "minusi";
         case INST_MULTI:   return "multi";
         case INST_DIVI:    return "divi";
+        case INST_MODI:    return "modi";
         case INST_PLUSF:   return "plusf";
         case INST_MINUSF:  return "minusf";
         case INST_MULTF:   return "multf";
@@ -433,6 +435,7 @@ bool InstHasOperand(InstType instType)
         case INST_MINUSI:  return false;
         case INST_MULTI:   return false;
         case INST_DIVI:    return false;
+        case INST_MODI:    return false;
         case INST_ANDB:    return false;
         case INST_ORB:     return false;
         case INST_XOR:     return false;
@@ -1013,6 +1016,21 @@ ExceptionState mvm_execInst(Mvm* mvm)
             break;
         }
 
+        case INST_MODI: {
+            if (mvm->stack_size < 2) {
+                return EXCEPTION_STACK_UNDERFLOW;
+            }
+
+            if (mvm->stack[mvm->stack_size - 1].as_u64 == 0) {
+                return EXCEPTION_DIV_BY_ZERO;
+            }
+
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 % mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
         case INST_PLUSF: {
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
@@ -1197,7 +1215,7 @@ ExceptionState mvm_execInst(Mvm* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2] = word_f64(mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
