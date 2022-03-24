@@ -1,0 +1,24 @@
+%include "../msmlib/stdlib.mlb"
+
+%define str_name "Name: "
+%define str_hello "Hello "
+
+push str_name
+push 6
+int write
+
+push 0
+int readline
+
+push str_hello
+push 6
+int write
+
+print_loop:
+    dup 0
+    int print_char
+    push 0
+    equal
+    not
+    jmpif print_loop
+hlt

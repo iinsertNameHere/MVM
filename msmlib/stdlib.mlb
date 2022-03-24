@@ -8,6 +8,7 @@
 %define free       6
 %define mem_dump   7
 %define write      8
+%define readline   9
 ;; ----------------- ;;
 
 ; define new-line ascii code
