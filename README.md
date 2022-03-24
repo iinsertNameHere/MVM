@@ -164,16 +164,18 @@ The value can also be a string.
 ```
 
 ### Software Tnterrupts:
-| Interrupt name | Address | args         | Description                                                                     |
-|----------------|---------|--------------|---------------------------------------------------------------------------------|
-| print_char     | 0       | `ascii_code` | Prints the given `ascii_code` value as char to stdout.                          |
-| print_f64      | 1       | `f64_value`  | Prints the given `f64_value` value  to stdout.                                  |
-| print_i64      | 2       | `i64_value`  | Prints the given `i64_value` value  to stdout.                                  |
-| print_u64      | 3       | `u64_value`  | Prints the given `u64_value` value to stdout.                                   |
-| print_ptr      | 4       | `ptr`        | Prints the given `ptr` value to stdout.                                         |
-| alloc          | 5       | `size`       | Allocates a block of memory, returning a pointer to the beginning of the block. |
-| free           | 6       | `ptr`        | Deallocates a space previously allocated by alloc, using the given 'ptr' value. |
-| mem_dump       | 7       | `ptr` `size` | Dumps the memory, starting from the given `ptr` up to `ptr + size`.             |
+| Interrupt name | Address | args             | Description                                                                     |
+|----------------|---------|------------------|---------------------------------------------------------------------------------|
+| print_char     | 0       | `ascii_code`     | Prints the given `ascii_code` value as char to stdout.                          |
+| print_f64      | 1       | `f64_value`      | Prints the given `f64_value` value  to stdout.                                  |
+| print_i64      | 2       | `i64_value`      | Prints the given `i64_value` value  to stdout.                                  |
+| print_u64      | 3       | `u64_value`      | Prints the given `u64_value` value to stdout.                                   |
+| print_ptr      | 4       | `ptr`            | Prints the given `ptr` value to stdout.                                         |
+| alloc          | 5       | `size`           | Allocates a block of memory, returning a pointer to the beginning of the block. |
+| free           | 6       | `ptr`            | Deallocates a space previously allocated by alloc, using the given 'ptr' value. |
+| mem_dump       | 7       | `ptr` `size`     | Dumps the memory, starting from the given `ptr` up to `ptr + size`.             |
+| write          | 8       | `ptr` `str_size` | Writes a memory string to stdout.                                               |
+| readline       | 9       | NONE             | Reads a line from stdin to the stack in reverse.                                |
 <br>
 
 In [msm](#msm) interrupts are used as shown below.
