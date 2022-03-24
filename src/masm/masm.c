@@ -11,7 +11,7 @@ static void usage(FILE* stream)
 {
     fprintf(stream, "Usage: masm -i <input.msm> -o <output.mbc> [options]\n");
     fprintf(stream, "  -h          Provides a help list.\n");
-    fprintf(stream, "  -d          Enables step-debug mode.\n");
+    fprintf(stream, "  -d          Print debug information.\n");
     fprintf(stream, "  -c          Enables Compatibility Warnings.\n");
 }
 

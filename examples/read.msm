@@ -21,4 +21,8 @@ print_loop:
     equal
     not
     jmpif print_loop
+<<<<<<< HEAD
 hlt
+=======
+hlt
+>>>>>>> 07fdb9e7e782953c3f2f9c951f474c4fc49ce15f

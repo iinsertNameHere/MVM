@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <string.h>
 
 // PACK struct definition code: https://stackoverflow.com/a/3312896/18037447
 #if defined(__GNUC__) || defined(__clang__)
@@ -92,6 +93,7 @@ typedef enum _EXCEPTIONSTATE_ {
     EXCEPTION_ILLEGAL_INST_ACCESS,
     EXCEPTION_ILLEGAL_OPERAND,
     EXCEPTION_MEMORY_ACCESS_VIOLATION,
+    EXCEPTION_INTERRUPT_FAILED,
 } ExceptionState;
 
 const char* exception_as_cstr(ExceptionState exception);
@@ -110,6 +112,7 @@ typedef enum _INSTTYPE_ {
     INST_MINUSI,
     INST_MULTI,
     INST_DIVI,
+    INST_MODI,
     INST_PLUSF,
     INST_MINUSF,
     INST_MULTF,
@@ -246,6 +249,7 @@ ExceptionState interrupt_ALLOC(Mvm* mvm);
 ExceptionState interrupt_FREE (Mvm* mvm);
 ExceptionState interrupt_DUMPMEM (Mvm* mvm);
 ExceptionState interrupt_WRITE (Mvm* mvm);
+ExceptionState interrupt_READLINE (Mvm* mvm);
 ////////////////////////////////////////////
 
 char* shift(int* argc, char*** argv);
@@ -353,6 +357,7 @@ const char* exception_as_cstr(ExceptionState exception)
         case EXCEPTION_ILLEGAL_INST_ACCESS:     return "EXCEPTION_ILLEGAL_INST_ACCESS";
         case EXCEPTION_ILLEGAL_OPERAND:         return "EXCEPTION_ILLEGAL_OPERAND";
         case EXCEPTION_MEMORY_ACCESS_VIOLATION: return "EXCEPTION_MEMORY_ACCESS_VIOLATION";
+        case EXCEPTION_INTERRUPT_FAILED:        return "EXCEPTION_INTERRUPT_FAILED";
         default:
             fprintf(stderr, "ERROR: Encountered unknown Exception type!");
             exit(1);
@@ -373,6 +378,7 @@ const char* InstName(InstType instType)
         case INST_MINUSI:  return "minusi";
         case INST_MULTI:   return "multi";
         case INST_DIVI:    return "divi";
+        case INST_MODI:    return "modi";
         case INST_PLUSF:   return "plusf";
         case INST_MINUSF:  return "minusf";
         case INST_MULTF:   return "multf";
@@ -433,6 +439,7 @@ bool InstHasOperand(InstType instType)
         case INST_MINUSI:  return false;
         case INST_MULTI:   return false;
         case INST_DIVI:    return false;
+        case INST_MODI:    return false;
         case INST_ANDB:    return false;
         case INST_ORB:     return false;
         case INST_XOR:     return false;
@@ -1013,6 +1020,21 @@ ExceptionState mvm_execInst(Mvm* mvm)
             break;
         }
 
+        case INST_MODI: {
+            if (mvm->stack_size < 2) {
+                return EXCEPTION_STACK_UNDERFLOW;
+            }
+
+            if (mvm->stack[mvm->stack_size - 1].as_u64 == 0) {
+                return EXCEPTION_DIV_BY_ZERO;
+            }
+
+            mvm->stack[mvm->stack_size - 2].as_u64 = mvm->stack[mvm->stack_size - 2].as_u64 % mvm->stack[mvm->stack_size - 1].as_u64;
+            mvm->stack_size -= 1;
+            mvm->ip += 1;
+            break;
+        }
+
         case INST_PLUSF: {
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
@@ -1197,7 +1219,7 @@ ExceptionState mvm_execInst(Mvm* mvm)
             if (mvm->stack_size < 2) {
                 return EXCEPTION_STACK_UNDERFLOW;
             }
-            mvm->stack[mvm->stack_size - 2] = word_f64(mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
+            mvm->stack[mvm->stack_size - 2] = word_u64(mvm->stack[mvm->stack_size - 1].as_u64 >= mvm->stack[mvm->stack_size - 2].as_u64);
             mvm->stack_size -= 1;
             mvm->ip += 1;
             break;
@@ -1483,6 +1505,53 @@ ExceptionState interrupt_WRITE (Mvm* mvm)
     fwrite(&mvm->memory[addr], sizeof(mvm->memory[0]), (size_t)count, stdout);
 
     mvm->stack_size -= 2;
+
+    return EXCEPTION_SATE_OK;
+}
+
+ExceptionState interrupt_READLINE (Mvm* mvm)
+{
+    char * line = malloc(100), * linep = line;
+    size_t lenmax = 100, len = lenmax;
+    int c;
+
+    if(line == NULL) {
+        return EXCEPTION_INTERRUPT_FAILED;
+    }    
+
+    for(;;) {
+        c = fgetc(stdin);
+        if(c == EOF)
+            break;
+
+        if(--len == 0) {
+            len = lenmax;
+            char * linen = realloc(linep, lenmax *= 2);
+
+            if(linen == NULL) {
+                free(linep);
+                return EXCEPTION_INTERRUPT_FAILED;
+            }
+            line = linen + (line - linep);
+            linep = linen;
+        }
+
+        if((*line++ = (char)c) == '\n')
+            break;
+    }
+    *line = '\0';
+    const char* cstr = linep;
+
+    StringView sv = cstr_as_sv(cstr);
+
+    if (mvm->stack_size + sv.count > MVM_STACK_CAPACITY) {
+        return EXCEPTION_STACK_OVERFLOW;
+    }
+
+    for (size_t i = 0; i <= sv.count; ++i) {
+        mvm->stack_size += 1;
+        mvm->stack[mvm->stack_size] = word_u64((uint64_t)sv.data[sv.count - 1 - i]);
+    }
 
     return EXCEPTION_SATE_OK;
 }
